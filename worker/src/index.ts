@@ -1095,6 +1095,15 @@ a.back { display: inline-block; margin-top: 16px; font-size: 14px; color: #0071e
 	  <div class="plog" id="plog"></div>
 	</div>
   </div>
+  <div class="card" style="margin-top:0">
+    <h2 style="font-size:16px;font-weight:700;margin-bottom:6px;color:#1d1d1f">&#128203; Paste URLs</h2>
+    <p style="font-size:13px;color:#6e6e73;margin-bottom:14px">Paste one URL per line — saved instantly without fetching metadata</p>
+    <textarea id="paste-urls" placeholder="https://example.com&#10;https://another.com&#10;..." style="width:100%;height:140px;border:1px solid #d2d2d7;border-radius:10px;padding:10px 14px;font-size:13px;font-family:inherit;resize:vertical;outline:none;background:#f5f5f7"></textarea>
+    <label style="font-size:13px;color:#6e6e73;display:block;margin:10px 0 4px;font-weight:600">Tag (optional, applied to all)</label>
+    <input type="text" id="paste-tag" placeholder="e.g. read-later, research" style="width:100%;border:1px solid #d2d2d7;border-radius:10px;padding:8px 14px;font-size:14px;outline:none;background:#f5f5f7">
+    <button id="paste-btn" onclick="savePasted()" style="width:100%;background:#0071e3;color:white;border:none;border-radius:10px;padding:12px;font-size:15px;font-weight:600;cursor:pointer;margin-top:12px">Save URLs</button>
+    <div id="paste-result" style="margin-top:10px;font-size:13px"></div>
+  </div>
   <a class="back" href="/">&#8592; Back to My Links</a>
 </div>
 <scr` + `ipt>
@@ -1187,6 +1196,30 @@ function startImport() {
     });
   }
   next(0);
+}
+
+function savePasted() {
+  var raw = document.getElementById('paste-urls').value;
+  var tag = document.getElementById('paste-tag').value.trim();
+  var urls = raw.split('\n').map(function(l){ return l.trim(); }).filter(function(l){ return l.startsWith('http'); });
+  if (!urls.length) { document.getElementById('paste-result').innerHTML = '<span style="color:#ff3b30">No valid URLs found.</span>'; return; }
+  var btn = document.getElementById('paste-btn');
+  var result = document.getElementById('paste-result');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  result.innerHTML = '';
+  var links = urls.map(function(u){ return { url: u, tags: tag }; });
+  fetch('/links/batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ links: links })
+  }).then(function(r){ return r.json(); }).then(function(d){
+    result.innerHTML = '<span style="color:#34c759;font-weight:600">&#10003; Saved ' + d.saved + ' links</span>';
+    document.getElementById('paste-urls').value = '';
+    btn.disabled = false; btn.textContent = 'Save URLs';
+  }).catch(function(){
+    result.innerHTML = '<span style="color:#ff3b30">Error saving links.</span>';
+    btn.disabled = false; btn.textContent = 'Save URLs';
+  });
 }
 <\/scr` + `ipt>
 </body>
