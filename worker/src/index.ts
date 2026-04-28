@@ -1204,7 +1204,6 @@ function savePasted() {
   var btn = document.getElementById('paste-btn');
   var result = document.getElementById('paste-result');
 
-  // Handle \r\n, \r, \n line endings
   var lines = raw.split(/\\r\\n|\\r|\\n/).map(function(l){ return l.trim(); });
 
   // Parse title+URL pairs (Safari copy format: title line then URL line)
