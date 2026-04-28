@@ -1276,6 +1276,27 @@ function startImport() {
 		  .bind(cleanUrl, finalTitle, body.caption || meta.description || '', meta.thumbnail || '', autoTags).run();
 		return new Response(JSON.stringify({ ok: true, title: finalTitle }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 	  }
+
+	  if (request.method === 'POST' && path === '/links/batch') {
+		const body = await request.json() as { links: Array<{ url: string; title?: string; tags?: string }> };
+		if (!Array.isArray(body.links) || body.links.length === 0) {
+		  return new Response(JSON.stringify({ error: 'links array required' }), { status: 400, headers: corsHeaders });
+		}
+		const statements = body.links
+		  .filter((item) => item.url && item.url.trim())
+		  .map((item) => {
+			const cleanUrl = decodeEntities(item.url.trim());
+			const title = item.title ? decodeEntities(item.title) : cleanUrl;
+			const tags = item.tags || '';
+			return env.links_db.prepare('INSERT INTO links (url, title, tags) VALUES (?, ?, ?)')
+			  .bind(cleanUrl, title, tags);
+		  });
+		if (statements.length === 0) {
+		  return new Response(JSON.stringify({ saved: 0 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+		}
+		await env.links_db.batch(statements);
+		return new Response(JSON.stringify({ saved: statements.length }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+	  }
   
 	  if (request.method === 'GET' && path === '/links') {
 		const search = url.searchParams.get('search') || '';
