@@ -272,6 +272,7 @@ interface Env {
 	<button class="trash-btn" onclick="openTrash()">&#128465;</button>
 	<button class="trash-btn" onclick="openRules()" title="Auto-tag Rules">&#9881;</button>
 	<button class="trash-btn" onclick="location.href='/import'" title="Import Bookmarks" style="color:#0071e3;border-color:#0071e3;">&#128228;</button>
+	<button class="trash-btn" onclick="location.href='/collections'" title="Collections" style="color:#5856d6;border-color:#5856d6;">&#128193;</button>
   </header>
   <div class="tab-bar" id="tab-bar">
 	<div class="tab active" id="tab-all" onclick="switchTab('all')">&#128279; All <span class="tab-count" id="cnt-all">0</span></div>
@@ -1000,6 +1001,196 @@ interface Env {
   </html>`;
   }
   
+  function getCollectionsHTML(): string {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Collections - My Links</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f7; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+header { background: white; padding: 14px 20px; border-bottom: 1px solid #e5e5e5; display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+.back { color: #0071e3; text-decoration: none; font-size: 14px; font-weight: 500; }
+header h1 { font-size: 18px; font-weight: 700; color: #1d1d1f; }
+.hcnt { background: #5856d6; color: white; border-radius: 10px; padding: 1px 8px; font-size: 12px; font-weight: 600; }
+.layout { display: flex; flex: 1; overflow: hidden; }
+.sidebar { width: 260px; flex-shrink: 0; background: white; border-right: 1px solid #e5e5e5; display: flex; flex-direction: column; overflow: hidden; }
+.sidebar-head { padding: 12px; border-bottom: 1px solid #f0f0f0; }
+.sidebar-head input { width: 100%; border: 1px solid #d2d2d7; border-radius: 8px; padding: 7px 12px; font-size: 13px; outline: none; background: #f5f5f7; }
+.sidebar-head input:focus { border-color: #0071e3; background: white; }
+.col-list { overflow-y: auto; flex: 1; }
+.col-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #f5f5f7; border-left: 3px solid transparent; }
+.col-item:hover { background: #f9f9fb; }
+.col-item.active { background: #f0f6ff; border-left-color: #5856d6; }
+.col-name { font-size: 14px; font-weight: 600; color: #1d1d1f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.col-meta { font-size: 12px; color: #aeaeb2; margin-top: 2px; }
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.no-sel { display: flex; align-items: center; justify-content: center; flex: 1; color: #aeaeb2; font-size: 15px; }
+.mhead { background: white; border-bottom: 1px solid #e5e5e5; padding: 18px 24px 14px; flex-shrink: 0; }
+.mtitle { font-size: 20px; font-weight: 700; color: #1d1d1f; border: 1px solid transparent; outline: none; background: transparent; width: 100%; padding: 4px 8px; border-radius: 8px; margin-left: -8px; font-family: inherit; }
+.mtitle:hover { background: #f5f5f7; }
+.mtitle:focus { background: white; border-color: #0071e3; }
+.mdesc { font-size: 14px; color: #6e6e73; border: 1px solid transparent; outline: none; background: transparent; width: 100%; margin-top: 6px; padding: 4px 8px; border-radius: 8px; margin-left: -8px; resize: none; font-family: inherit; display: block; }
+.mdesc:hover { background: #f5f5f7; }
+.mdesc:focus { background: white; border-color: #0071e3; }
+.mactions { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+.btn { border: none; border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-blue { background: #0071e3; color: white; }
+.btn-gray { background: #f0f0f5; color: #1d1d1f; }
+.mcnt { font-size: 13px; color: #aeaeb2; margin-left: auto; }
+.links-list { overflow-y: auto; flex: 1; padding: 8px 24px 24px; }
+.lrow { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f5f5f7; }
+.lrow:last-child { border-bottom: none; }
+.lfav { width: 16px; height: 16px; flex-shrink: 0; border-radius: 3px; }
+.linfo { flex: 1; min-width: 0; }
+.ltitle { font-size: 14px; font-weight: 500; color: #1d1d1f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ltitle a { color: inherit; text-decoration: none; }
+.ltitle a:hover { color: #0071e3; }
+.lurl { font-size: 12px; color: #0071e3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ldate { font-size: 11px; color: #aeaeb2; flex-shrink: 0; }
+.empty { text-align: center; padding: 60px 24px; color: #aeaeb2; font-size: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <a href="/" class="back">&#8592; My Links</a>
+  <h1>&#128193; Collections</h1>
+  <span class="hcnt" id="hcnt">0</span>
+</header>
+<div class="layout">
+  <div class="sidebar">
+    <div class="sidebar-head">
+      <input type="text" id="search" placeholder="Search collections..." oninput="filterCols()">
+    </div>
+    <div class="col-list" id="col-list"><div class="empty">Loading...</div></div>
+  </div>
+  <div class="main" id="main">
+    <div class="no-sel">&#8592; Select a collection to view its links</div>
+  </div>
+</div>
+<scr` + `ipt>
+var allCols = [], curTag = null, curLinks = [];
+
+fetch('/collections-data').then(function(r){ return r.json(); }).then(function(d){
+  allCols = d.collections || [];
+  document.getElementById('hcnt').textContent = allCols.length;
+  renderSidebar(allCols);
+});
+
+function filterCols() {
+  var q = document.getElementById('search').value.toLowerCase();
+  renderSidebar(q ? allCols.filter(function(c){ return (c.name || c.tag).toLowerCase().indexOf(q) >= 0; }) : allCols);
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function hostname(url) { try { return new URL(url).hostname; } catch(e) { return url; } }
+
+function fmtDate(s) {
+  if (!s) return '';
+  return new Date(s.endsWith('Z') ? s : s + 'Z').toLocaleDateString('en-AU', {day:'numeric', month:'short', year:'numeric', timeZone:'Australia/Brisbane'});
+}
+
+function renderSidebar(cols) {
+  var list = document.getElementById('col-list');
+  if (!cols.length) { list.innerHTML = '<div class="empty">No collections found</div>'; return; }
+  var html = '';
+  for (var i = 0; i < cols.length; i++) {
+    var c = cols[i];
+    html += '<div class="col-item' + (c.tag === curTag ? ' active' : '') + '" data-tag="' + esc(c.tag) + '">';
+    html += '<div class="col-name">' + esc(c.name || c.tag) + '</div>';
+    html += '<div class="col-meta">' + c.count + ' links';
+    if (c.latest) html += ' &middot; ' + fmtDate(c.latest);
+    html += '</div></div>';
+  }
+  list.innerHTML = html;
+  var items = list.querySelectorAll('.col-item');
+  for (var j = 0; j < items.length; j++) {
+    (function(el) { el.addEventListener('click', function(){ loadCol(el.getAttribute('data-tag')); }); })(items[j]);
+  }
+}
+
+function loadCol(tag) {
+  curTag = tag;
+  renderSidebar(allCols);
+  var col = allCols.find(function(c){ return c.tag === tag; });
+  var main = document.getElementById('main');
+  main.innerHTML = '<div class="no-sel">Loading...</div>';
+  fetch('/collection-links?tag=' + encodeURIComponent(tag)).then(function(r){ return r.json(); }).then(function(d){
+    curLinks = d.links || [];
+    var html = '<div class="mhead">';
+    html += '<input class="mtitle" id="mtitle" value="' + esc(col.name || col.tag) + '" onblur="saveMeta()">';
+    html += '<textarea class="mdesc" id="mdesc" rows="2" placeholder="Add a description..." onblur="saveMeta()">' + esc(col.description || '') + '</textarea>';
+    html += '<div class="mactions">';
+    html += '<button class="btn btn-blue" onclick="openAll()">&#128193; Open all (' + curLinks.length + ')</button>';
+    html += '<button class="btn btn-gray" onclick="copyUrls(this)">&#8682; Copy URLs</button>';
+    html += '<span class="mcnt">' + curLinks.length + ' links';
+    if (col.latest) html += ' &middot; ' + fmtDate(col.latest);
+    html += '</span></div></div>';
+    html += '<div class="links-list">';
+    if (curLinks.length) {
+      for (var i = 0; i < curLinks.length; i++) {
+        var l = curLinks[i];
+        var h = hostname(l.url);
+        html += '<div class="lrow">';
+        html += '<img class="lfav" src="https://www.google.com/s2/favicons?domain=' + encodeURIComponent(h) + '&sz=32" onerror="this.style.display=\'none\'">';
+        html += '<div class="linfo">';
+        html += '<div class="ltitle"><a href="' + esc(l.url) + '" target="_blank" rel="noopener">' + esc(l.title || l.url) + '</a></div>';
+        html += '<div class="lurl">' + esc(h) + '</div>';
+        html += '</div>';
+        html += '<div class="ldate">' + fmtDate(l.created_at) + '</div>';
+        html += '</div>';
+      }
+    } else {
+      html += '<div class="empty">No links in this collection</div>';
+    }
+    html += '</div>';
+    main.innerHTML = html;
+  });
+}
+
+function saveMeta() {
+  if (!curTag) return;
+  var titleEl = document.getElementById('mtitle');
+  var descEl = document.getElementById('mdesc');
+  if (!titleEl || !descEl) return;
+  var name = titleEl.value.trim();
+  var desc = descEl.value.trim();
+  var col = allCols.find(function(c){ return c.tag === curTag; });
+  if (!col) return;
+  if (name === (col.name || col.tag) && desc === (col.description || '')) return;
+  fetch('/collection-meta?tag=' + encodeURIComponent(curTag), {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name: name, description: desc})
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if (d.ok) { col.name = name; col.description = desc; renderSidebar(allCols); }
+  });
+}
+
+function openAll() {
+  for (var i = 0; i < curLinks.length; i++) {
+    window.open(curLinks[i].url, '_blank');
+  }
+}
+
+function copyUrls(btn) {
+  var urls = curLinks.map(function(l){ return l.url; }).join('\\n');
+  navigator.clipboard.writeText(urls).then(function(){
+    var orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(function(){ btn.textContent = orig; }, 1500);
+  });
+}
+<\/scr` + `ipt>
+</body>
+</html>`;
+  }
+
   export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 	  const url = new URL(request.url);
@@ -1034,6 +1225,50 @@ interface Env {
 		  if (row.tags) row.tags.split(',').forEach((t: string) => { const tag = t.trim(); if (tag) tagMap[tag] = (tagMap[tag] || 0) + 1; });
 		});
 		return new Response(JSON.stringify(tagMap), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+	  }
+
+	  if (request.method === 'GET' && path === '/collections') {
+		return new Response(getCollectionsHTML(), { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+	  }
+
+	  if (request.method === 'GET' && path === '/collections-data') {
+		await env.links_db.prepare('CREATE TABLE IF NOT EXISTS tag_metadata (id INTEGER PRIMARY KEY AUTOINCREMENT, tag TEXT NOT NULL UNIQUE, name TEXT, description TEXT, created_at DATETIME DEFAULT (datetime(\'now\')))').run();
+		const { results: rows } = await env.links_db.prepare('SELECT tags, created_at FROM links WHERE deleted_at IS NULL AND tags IS NOT NULL AND tags != \'\'').all();
+		const tagMap = new Map<string, { count: number; latest: string }>();
+		for (const row of rows as any[]) {
+		  const tags = row.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+		  for (const tag of tags) {
+			const ex = tagMap.get(tag);
+			if (ex) { ex.count++; if (row.created_at > ex.latest) ex.latest = row.created_at; }
+			else tagMap.set(tag, { count: 1, latest: row.created_at });
+		  }
+		}
+		const { results: meta } = await env.links_db.prepare('SELECT * FROM tag_metadata').all();
+		const metaMap: Record<string, any> = {};
+		(meta as any[]).forEach((m: any) => { metaMap[m.tag] = m; });
+		const collections = Array.from(tagMap.entries())
+		  .map(([tag, d]) => ({ tag, count: d.count, latest: d.latest, name: metaMap[tag]?.name || null, description: metaMap[tag]?.description || null }))
+		  .sort((a, b) => (b.latest > a.latest ? 1 : -1));
+		return new Response(JSON.stringify({ collections }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+	  }
+
+	  if (request.method === 'GET' && path === '/collection-links') {
+		const tag = url.searchParams.get('tag') || '';
+		if (!tag) return new Response(JSON.stringify({ links: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+		const { results } = await env.links_db.prepare(
+		  'SELECT * FROM links WHERE deleted_at IS NULL AND (tags = ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ?) ORDER BY created_at DESC'
+		).bind(tag, tag + ',%', '%, ' + tag, '%,' + tag + ',%').all();
+		const filtered = (results as any[]).filter((r: any) => r.tags.split(',').map((t: string) => t.trim()).includes(tag));
+		return new Response(JSON.stringify({ links: filtered }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+	  }
+
+	  if (request.method === 'PATCH' && path === '/collection-meta') {
+		const tag = url.searchParams.get('tag') || '';
+		if (!tag) return new Response(JSON.stringify({ error: 'tag required' }), { status: 400, headers: corsHeaders });
+		const body = await request.json() as { name?: string; description?: string };
+		await env.links_db.prepare('INSERT INTO tag_metadata (tag, name, description) VALUES (?, ?, ?) ON CONFLICT(tag) DO UPDATE SET name = excluded.name, description = excluded.description')
+		  .bind(tag, body.name || '', body.description || '').run();
+		return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 	  }
   
 
