@@ -1201,24 +1201,57 @@ function startImport() {
 function savePasted() {
   var raw = document.getElementById('paste-urls').value;
   var tag = document.getElementById('paste-tag').value.trim();
-  var urls = raw.split('\n').map(function(l){ return l.trim(); }).filter(function(l){ return l.startsWith('http'); });
-  if (!urls.length) { document.getElementById('paste-result').innerHTML = '<span style="color:#ff3b30">No valid URLs found.</span>'; return; }
   var btn = document.getElementById('paste-btn');
   var result = document.getElementById('paste-result');
-  btn.disabled = true; btn.textContent = 'Saving...';
+
+  // Handle \r\n, \r, \n line endings
+  var lines = raw.split(/\r\n|\r|\n/).map(function(l){ return l.trim(); });
+
+  // Parse title+URL pairs (Safari copy format: title line then URL line)
+  var links = [];
+  for (var i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith('http')) {
+      var url = lines[i];
+      // Check if the next line continues the URL (starts with /)
+      while (i + 1 < lines.length && lines[i+1].startsWith('/')) {
+        url += lines[++i];
+      }
+      // Check if the previous non-empty line was a title
+      var title = '';
+      for (var j = i - 1; j >= 0; j--) {
+        if (lines[j] && !lines[j].startsWith('http')) { title = lines[j]; break; }
+        if (!lines[j]) break;
+      }
+      links.push({ url: url, title: title || url, tags: tag });
+    }
+  }
+
+  if (!links.length) {
+    result.innerHTML = '<span style="color:#ff3b30">No valid URLs found. Make sure each URL starts with http.</span>';
+    result.scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Saving ' + links.length + ' links...';
   result.innerHTML = '';
-  var links = urls.map(function(u){ return { url: u, tags: tag }; });
+
   fetch('/links/batch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ links: links })
   }).then(function(r){ return r.json(); }).then(function(d){
-    result.innerHTML = '<span style="color:#34c759;font-weight:600">&#10003; Saved ' + d.saved + ' links</span>';
-    document.getElementById('paste-urls').value = '';
+    if (d.saved !== undefined) {
+      result.innerHTML = '<span style="color:#34c759;font-weight:600">&#10003; Saved ' + d.saved + ' links</span>';
+      document.getElementById('paste-urls').value = '';
+    } else {
+      result.innerHTML = '<span style="color:#ff3b30">Error: ' + (d.error || 'Unknown error') + '</span>';
+    }
     btn.disabled = false; btn.textContent = 'Save URLs';
-  }).catch(function(){
-    result.innerHTML = '<span style="color:#ff3b30">Error saving links.</span>';
+    result.scrollIntoView({ behavior: 'smooth' });
+  }).catch(function(e){
+    result.innerHTML = '<span style="color:#ff3b30">Network error. Are you logged in?</span>';
     btn.disabled = false; btn.textContent = 'Save URLs';
+    result.scrollIntoView({ behavior: 'smooth' });
   });
 }
 <\/scr` + `ipt>
