@@ -1244,14 +1244,15 @@ button:hover { background: #0077ed; }
 		}
 		if (request.method === 'POST') {
 		  const body = await request.formData();
-		  const password = body.get('token') as string || '';
-		  const validPassword = env.LOGIN_PASSWORD || env.API_TOKEN;
+		  const password = (body.get('token') as string || '').trim();
+		  const validPassword = (env.LOGIN_PASSWORD || env.API_TOKEN || '').trim();
+		  const apiToken = (env.API_TOKEN || '').trim();
 		  if (validPassword && password === validPassword) {
 			return new Response(null, {
 			  status: 302,
 			  headers: {
 				'Location': '/',
-				'Set-Cookie': `session=${env.API_TOKEN}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=31536000`,
+				'Set-Cookie': `session=${apiToken}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=31536000`,
 			  },
 			});
 		  }
@@ -1268,10 +1269,11 @@ button:hover { background: #0077ed; }
 	  const tokenFromQuery = url.searchParams.get('token') || '';
 	  const cookies = request.headers.get('Cookie') || '';
 	  const sessionCookie = (cookies.split(';').find(c => c.trim().startsWith('session=')) || '').split('=').slice(1).join('=').trim();
-	  const hasValidToken = env.API_TOKEN && (
-		tokenFromHeader === env.API_TOKEN ||
-		tokenFromQuery === env.API_TOKEN ||
-		sessionCookie === env.API_TOKEN ||
+	  const apiToken = (env.API_TOKEN || '').trim();
+	  const hasValidToken = apiToken && (
+		tokenFromHeader.trim() === apiToken ||
+		tokenFromQuery.trim() === apiToken ||
+		sessionCookie === apiToken ||
 		cookies.includes('CF_Authorization')
 	  );
 
@@ -1285,6 +1287,10 @@ button:hover { background: #0077ed; }
 		});
 	  }
   
+	  if (request.method === 'GET' && path === '/') {
+		return new Response(getHTML(), { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+	  }
+
 	  if (request.method === 'GET' && path === '/tags') {
 		const { results } = await env.links_db.prepare(
 		  'SELECT tags FROM links WHERE tags IS NOT NULL AND tags != "" AND deleted_at IS NULL AND archived_at IS NULL AND is_private = 0'
