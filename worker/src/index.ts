@@ -1,6 +1,7 @@
 interface Env {
 	links_db: D1Database;
 	API_TOKEN: string;
+	LOGIN_PASSWORD?: string;
   }
   
   function decodeEntities(str: string): string {
@@ -1217,7 +1218,7 @@ button:hover { background: #0077ed; }
   <h1>My Links</h1>
   <p>Enter your access token to continue.</p>
   <form method="POST" action="/login">
-    <label for="token">Access Token</label>
+    <label for="token">Password</label>
     <input type="password" id="token" name="token" placeholder="••••••••" autofocus>
     <button type="submit">Sign In</button>
     ${error ? `<div class="err">${error}</div>` : ''}
@@ -1243,17 +1244,18 @@ button:hover { background: #0077ed; }
 		}
 		if (request.method === 'POST') {
 		  const body = await request.formData();
-		  const token = body.get('token') as string || '';
-		  if (env.API_TOKEN && token === env.API_TOKEN) {
+		  const password = body.get('token') as string || '';
+		  const validPassword = env.LOGIN_PASSWORD || env.API_TOKEN;
+		  if (validPassword && password === validPassword) {
 			return new Response(null, {
 			  status: 302,
 			  headers: {
 				'Location': '/',
-				'Set-Cookie': `session=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=31536000`,
+				'Set-Cookie': `session=${env.API_TOKEN}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=31536000`,
 			  },
 			});
 		  }
-		  return new Response(getLoginHTML('Incorrect token. Try again.'), {
+		  return new Response(getLoginHTML('Incorrect password. Try again.'), {
 			status: 401,
 			headers: { 'Content-Type': 'text/html; charset=utf-8' },
 		  });
