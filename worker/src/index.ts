@@ -1137,7 +1137,7 @@ function loadCol(tag) {
         var l = curLinks[i];
         var h = hostname(l.url);
         html += '<div class="lrow">';
-        html += '<img class="lfav" src="https://www.google.com/s2/favicons?domain=' + encodeURIComponent(h) + '&sz=32" onerror="this.style.display=\'none\'">';
+        html += '<img class="lfav" src="https://www.google.com/s2/favicons?domain=' + encodeURIComponent(h) + '&sz=32" onerror="this.style.display=\\'none\\'">';
         html += '<div class="linfo">';
         html += '<div class="ltitle"><a href="' + esc(l.url) + '" target="_blank" rel="noopener">' + esc(l.title || l.url) + '</a></div>';
         html += '<div class="lurl">' + esc(h) + '</div>';
@@ -1626,7 +1626,8 @@ function savePasted() {
 		}
 		if (tagsParam && view === 'all') {
 		  tagsParam.split(',').map((t: string) => t.trim()).filter(Boolean).forEach((tag: string) => {
-			conditions.push('tags LIKE ?'); params.push(`%${tag}%`);
+			conditions.push('(tags = ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ?)');
+			params.push(tag, tag + ',%', '%,' + tag, '%, ' + tag, '%,' + tag + ',%', '%, ' + tag + ',%');
 		  });
 		}
   
