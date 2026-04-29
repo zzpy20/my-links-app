@@ -1191,28 +1191,95 @@ function copyUrls(btn) {
 </html>`;
   }
 
+  function getLoginHTML(error = ''): string {
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Links — Login</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f7; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+.card { background: white; border-radius: 18px; padding: 40px 36px; width: 340px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+h1 { font-size: 22px; font-weight: 700; color: #1d1d1f; margin-bottom: 6px; }
+p { font-size: 14px; color: #6e6e73; margin-bottom: 24px; }
+label { display: block; font-size: 13px; font-weight: 500; color: #1d1d1f; margin-bottom: 6px; }
+input { width: 100%; border: 1px solid #d2d2d7; border-radius: 10px; padding: 10px 14px; font-size: 15px; outline: none; }
+input:focus { border-color: #0071e3; box-shadow: 0 0 0 3px rgba(0,113,227,0.15); }
+button { width: 100%; margin-top: 16px; background: #0071e3; color: white; border: none; border-radius: 10px; padding: 11px; font-size: 15px; font-weight: 600; cursor: pointer; }
+button:hover { background: #0077ed; }
+.err { margin-top: 12px; font-size: 13px; color: #ff3b30; text-align: center; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>My Links</h1>
+  <p>Enter your access token to continue.</p>
+  <form method="POST" action="/login">
+    <label for="token">Access Token</label>
+    <input type="password" id="token" name="token" placeholder="••••••••" autofocus>
+    <button type="submit">Sign In</button>
+    ${error ? `<div class="err">${error}</div>` : ''}
+  </form>
+</div>
+</body>
+</html>`;
+  }
+
   export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 	  const url = new URL(request.url);
 	  const path = url.pathname;
-  
-	  if (request.method === 'GET' && path === '/') {
-		return new Response(getHTML(), { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
-	  }
+
 	  if (request.method === 'OPTIONS') {
 		return new Response(null, { headers: corsHeaders });
 	  }
-  
+
+	  // Login route (no auth required)
+	  if (path === '/login') {
+		if (request.method === 'GET') {
+		  return new Response(getLoginHTML(), { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+		}
+		if (request.method === 'POST') {
+		  const body = await request.formData();
+		  const token = body.get('token') as string || '';
+		  if (env.API_TOKEN && token === env.API_TOKEN) {
+			return new Response(null, {
+			  status: 302,
+			  headers: {
+				'Location': '/',
+				'Set-Cookie': `session=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=31536000`,
+			  },
+			});
+		  }
+		  return new Response(getLoginHTML('Incorrect token. Try again.'), {
+			status: 401,
+			headers: { 'Content-Type': 'text/html; charset=utf-8' },
+		  });
+		}
+	  }
+
+	  // Auth check for all other routes
 	  const authHeader = request.headers.get('Authorization') || '';
 	  const tokenFromHeader = authHeader.replace('Bearer ', '');
 	  const tokenFromQuery = url.searchParams.get('token') || '';
-	  const hasValidToken = env.API_TOKEN && (tokenFromHeader === env.API_TOKEN || tokenFromQuery === env.API_TOKEN);
-	  const cfAccess = request.headers.get('Cookie') || '';
-	  const hasAccessCookie = cfAccess.includes('CF_Authorization');
-  
-	  if (request.method !== 'GET' && !hasValidToken && !hasAccessCookie) {
+	  const cookies = request.headers.get('Cookie') || '';
+	  const sessionCookie = (cookies.split(';').find(c => c.trim().startsWith('session=')) || '').split('=').slice(1).join('=').trim();
+	  const hasValidToken = env.API_TOKEN && (
+		tokenFromHeader === env.API_TOKEN ||
+		tokenFromQuery === env.API_TOKEN ||
+		sessionCookie === env.API_TOKEN ||
+		cookies.includes('CF_Authorization')
+	  );
+
+	  if (!hasValidToken) {
+		const acceptsHtml = (request.headers.get('Accept') || '').includes('text/html');
+		if (acceptsHtml || request.method === 'GET') {
+		  return new Response(null, { status: 302, headers: { 'Location': '/login' } });
+		}
 		return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-		  status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+		  status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
 		});
 	  }
   
