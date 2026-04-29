@@ -230,6 +230,7 @@ interface Env {
   .rtags { font-size: 12px; color: #6e6e73; }
   .rtoggle { background: none; border: 1px solid #d2d2d7; border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; }
   .rdel { background: none; border: none; color: #ff3b30; font-size: 16px; cursor: pointer; padding: 0 4px; }
+  .redit { background: none; border: none; color: #0071e3; font-size: 14px; cursor: pointer; padding: 0 4px; }
   .radd { padding: 16px; border-top: 1px solid #e5e5e5; }
   .radd h4 { font-size: 14px; font-weight: 600; margin-bottom: 10px; color: #1d1d1f; }
   .radd-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -965,6 +966,8 @@ interface Env {
 		var tags = document.createElement('div'); tags.className = 'rtags'; tags.textContent = '\u2192 ' + r.tags; div.appendChild(tags);
 		var tog = document.createElement('button'); tog.className = 'rtoggle'; tog.textContent = r.enabled ? 'On' : 'Off';
 		tog.onclick = (function(id,en){return function(){toggleRule(id,en?0:1);};})(r.id,r.enabled); div.appendChild(tog);
+		var edit = document.createElement('button'); edit.className = 'redit'; edit.innerHTML = '&#9998;'; edit.title = 'Edit';
+		edit.onclick = (function(id,type,pattern,tags,d){return function(){editRule(id,type,pattern,tags,d);};})(r.id,r.type,r.pattern,r.tags,div); div.appendChild(edit);
 		var del = document.createElement('button'); del.className = 'rdel'; del.innerHTML = '&#x2715;';
 		del.onclick = (function(id){return function(){deleteRule(id);};})(r.id); div.appendChild(del);
 		c.appendChild(div);
@@ -988,6 +991,33 @@ interface Env {
   function deleteRule(id) {
 	if (!confirm('Delete this rule?')) return;
 	fetch('/rules/'+id, {method:'DELETE'}).then(function(){loadRules();});
+  }
+
+  function editRule(id, type, pattern, tags, div) {
+	var orig = div.innerHTML;
+	div.innerHTML = '';
+	div.classList.remove('disabled');
+
+	var sel = document.createElement('select'); sel.className = 'rinput'; sel.style.flex = 'none'; sel.style.width = '100px';
+	['domain','keyword'].forEach(function(t){ var o = document.createElement('option'); o.value = t; o.textContent = t; if (t===type) o.selected = true; sel.appendChild(o); });
+
+	var patIn = document.createElement('input'); patIn.type = 'text'; patIn.className = 'rinput'; patIn.value = pattern; patIn.placeholder = 'pattern';
+	var tagIn = document.createElement('input'); tagIn.type = 'text'; tagIn.className = 'rinput'; tagIn.value = tags; tagIn.placeholder = 'tags';
+
+	var saveBtn = document.createElement('button'); saveBtn.className = 'radd-btn'; saveBtn.textContent = 'Save';
+	saveBtn.style.cssText = 'font-size:13px;padding:5px 14px;white-space:nowrap';
+	saveBtn.onclick = function() {
+	  var np = patIn.value.trim(), nt = tagIn.value.trim();
+	  if (!np || !nt) { alert('Pattern and tags are required.'); return; }
+	  fetch('/rules/'+id, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:sel.value, pattern:np, tags:nt})})
+	  .then(function(){ loadRules(); });
+	};
+
+	var cancelBtn = document.createElement('button'); cancelBtn.className = 'rdel'; cancelBtn.textContent = 'Cancel';
+	cancelBtn.style.cssText = 'color:#6e6e73;font-size:13px';
+	cancelBtn.onclick = function() { div.innerHTML = orig; };
+
+	[sel, patIn, tagIn, saveBtn, cancelBtn].forEach(function(el){ div.appendChild(el); });
   }
   
   document.addEventListener('click', function(e) {
