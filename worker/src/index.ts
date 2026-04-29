@@ -1215,8 +1215,8 @@ function loadCol(tag) {
   fetch('/collection-links?tag=' + encodeURIComponent(tag)).then(function(r){ return r.json(); }).then(function(d){
     curLinks = d.links || [];
     var lockBtn = col.locked
-      ? '<button class="btn btn-lock" onclick="setCollectionLock(\'' + esc(tag) + '\', false)">&#128275; Remove Lock</button>'
-      : '<button class="btn btn-gray" onclick="setCollectionLock(\'' + esc(tag) + '\', true)">&#128274; Lock this</button>';
+      ? '<button class="btn btn-lock" onclick="setCollectionLock(\\'' + esc(tag) + '\\', false)">&#128275; Remove Lock</button>'
+      : '<button class="btn btn-gray" onclick="setCollectionLock(\\'' + esc(tag) + '\\', true)">&#128274; Lock this</button>';
     var html = '<div class="mhead">';
     html += '<input class="mtitle" id="mtitle" value="' + esc(col.name || col.tag) + '" onblur="saveMeta()">';
     html += '<textarea class="mdesc" id="mdesc" rows="2" placeholder="Add a description..." onblur="saveMeta()">' + esc(col.description || '') + '</textarea>';
