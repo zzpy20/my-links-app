@@ -1,11 +1,24 @@
 #!/bin/zsh
 # Save all open Safari tabs to My Links app
 # Usage: save-safari-session.sh [tag]
+#   If tag is omitted, prompts via a native dialog (pre-filled with today's date)
 
 API_TOKEN="YOUR_API_TOKEN_HERE"
 API_URL="https://links.1000600.xyz/links/batch"
-SESSION_TAG="${1:-$(date '+%Y-%m-%d')}"
-[[ -z "$SESSION_TAG" ]] && SESSION_TAG=$(date '+%Y-%m-%d')
+DEFAULT_TAG=$(date '+%Y-%m-%d')
+
+# Use argument if provided (command-line use), otherwise show native dialog
+if [[ -n "$1" ]]; then
+    SESSION_TAG="$1"
+else
+    SESSION_TAG=$(osascript -e "
+tell application \"System Events\"
+    set response to display dialog \"Session tag:\" default answer \"$DEFAULT_TAG\" buttons {\"Cancel\", \"Save\"} default button \"Save\" with title \"Save Safari Tabs\"
+    return text returned of response
+end tell
+" 2>/dev/null)
+    [[ -z "$SESSION_TAG" ]] && SESSION_TAG=$DEFAULT_TAG
+fi
 
 # Get Safari tabs into temp file
 osascript -e '
@@ -46,7 +59,7 @@ print(json.dumps({'links': links}))
 PYEOF
 )
 
-# POST with curl (avoids Python SSL cert issues)
+# POST with curl
 RESPONSE=$(curl -s -X POST "$API_URL" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $API_TOKEN" \
