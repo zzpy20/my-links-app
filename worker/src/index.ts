@@ -1488,7 +1488,6 @@ button:hover { background: #0077ed; }
 		if (fields.length) await env.links_db.prepare('UPDATE tag_metadata SET ' + fields.join(', ') + ' WHERE tag = ?').bind(...vals, tag).run();
 		return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 	  }
-  
 
   if (request.method === 'POST' && path === '/unlock') {
 	const body = await request.json() as { password: string };
