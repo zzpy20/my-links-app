@@ -222,12 +222,12 @@ interface Env {
   .rhead-sub { font-size: 13px; color: #6e6e73; margin-left: 8px; }
   .rhead-close { margin-left: auto; background: none; border: none; font-size: 20px; cursor: pointer; color: #6e6e73; }
   .rlist { overflow-y: auto; padding: 12px 16px; flex: 1; }
-  .ritem { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #f5f5f7; border-radius: 10px; margin-bottom: 8px; }
+  .ritem { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 6px 10px; padding: 10px 12px; background: #f5f5f7; border-radius: 10px; margin-bottom: 8px; }
   .ritem.disabled { opacity: 0.5; }
-  .rtype { background: #0071e3; color: white; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+  .rtype { background: #0071e3; color: white; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 600; flex-shrink: 0; margin-top: 2px; }
   .rtype.keyword { background: #34c759; }
-  .rpattern { font-size: 14px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .rtags { font-size: 12px; color: #6e6e73; }
+  .rpattern { font-size: 14px; font-weight: 600; flex: 1; min-width: 120px; word-break: break-word; }
+  .rtags { font-size: 12px; color: #6e6e73; width: 100%; padding-left: 2px; }
   .rtoggle { background: none; border: 1px solid #d2d2d7; border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; }
   .rdel { background: none; border: none; color: #ff3b30; font-size: 16px; cursor: pointer; padding: 0 4px; }
   .redit { background: none; border: none; color: #0071e3; font-size: 14px; cursor: pointer; padding: 0 4px; }
