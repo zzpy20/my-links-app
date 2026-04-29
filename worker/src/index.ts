@@ -1174,23 +1174,28 @@ function saveMeta() {
 }
 
 function openAll() {
+  window._openAllUrls = curLinks.map(function(l) { return l.url; });
   var items = curLinks.map(function(l) {
     var u = String(l.url || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
     var t = esc(l.title || l.url);
     return '<a href="' + u + '" target="_blank">' + t + '</a>';
   }).join('');
+  var cnt = curLinks.length;
   var html = '<html><head><meta charset="UTF-8"><title>Open All Links</title>'
     + '<style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#f5f5f7;padding:32px}'
     + '.card{background:white;border-radius:14px;padding:24px;max-width:680px;margin:0 auto;box-shadow:0 2px 16px rgba(0,0,0,.08)}'
     + 'h2{font-size:16px;font-weight:700;color:#1d1d1f;margin-bottom:4px}'
-    + 'p{font-size:13px;color:#6e6e73;margin-bottom:16px}'
+    + 'p{font-size:13px;color:#6e6e73;margin-bottom:12px}'
+    + '.btn{background:#0071e3;color:white;border:none;border-radius:8px;padding:9px 18px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:16px;display:block}'
+    + '.btn:hover{background:#0077ed}'
+    + '.note{font-size:12px;color:#aeaeb2;margin-bottom:16px}'
     + 'a{display:block;padding:9px 6px;color:#0071e3;text-decoration:none;border-bottom:1px solid #f5f5f7;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
-    + 'a:last-child{border-bottom:none}'
-    + 'a:hover{background:#f9f9fb;border-radius:6px}'
+    + 'a:last-child{border-bottom:none}a:hover{background:#f9f9fb;border-radius:6px}'
     + '</style></head><body>'
     + '<div class="card">'
     + '<h2>Open All Links</h2>'
-    + '<p>Cmd+click (Mac) or Middle-click each link to open in a new tab.</p>'
+    + '<button class="btn" onclick="window.opener._openAllUrls.forEach(function(u){window.open(u)})">Open All ' + cnt + ' Tabs (Chrome / Firefox)</button>'
+    + '<p class="note">Safari: Cmd+click individual links below instead.</p>'
     + items
     + '</div></body></html>';
   var w = window.open('', '_blank');
