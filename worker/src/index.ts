@@ -1055,6 +1055,15 @@ header h1 { font-size: 18px; font-weight: 700; color: #1d1d1f; }
 .col-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #f5f5f7; border-left: 3px solid transparent; }
 .col-item:hover { background: #f9f9fb; }
 .col-item.active { background: #f0f6ff; border-left-color: #5856d6; }
+.col-item.locked .col-name { color: #6e6e73; }
+.locked-panel { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 12px; color: #6e6e73; }
+.locked-panel .lock-icon { font-size: 40px; }
+.locked-panel .lock-msg { font-size: 15px; font-weight: 500; color: #1d1d1f; }
+.locked-panel .lock-sub { font-size: 13px; }
+.btn-lock { background: #ff9500; color: white; }
+.btn-lock:hover { background: #e08800; }
+.btn-unlock { background: #34c759; color: white; }
+.btn-unlock:hover { background: #28a745; }
 .col-name { font-size: 14px; font-weight: 600; color: #1d1d1f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .col-meta { font-size: 12px; color: #aeaeb2; margin-top: 2px; }
 .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -1089,6 +1098,8 @@ header h1 { font-size: 18px; font-weight: 700; color: #1d1d1f; }
   <a href="/" class="back">&#8592; My Links</a>
   <h1>&#128193; Collections</h1>
   <span class="hcnt" id="hcnt">0</span>
+  <button id="session-lock-btn" class="btn btn-unlock" style="margin-left:auto;display:none" onclick="lockSession()">&#128275; Lock</button>
+  <button id="session-unlock-btn" class="btn btn-blue" style="display:none" onclick="unlockSession()">&#128274; Unlock</button>
 </header>
 <div class="layout">
   <div class="sidebar">
@@ -1102,13 +1113,51 @@ header h1 { font-size: 18px; font-weight: 700; color: #1d1d1f; }
   </div>
 </div>
 <scr` + `ipt>
-var allCols = [], curTag = null, curLinks = [];
+var allCols = [], curTag = null, curLinks = [], isSessionUnlocked = false;
+
+function updateSessionButtons() {
+  var hasLocked = allCols.some(function(c){ return c.locked; });
+  document.getElementById('session-lock-btn').style.display = (hasLocked && isSessionUnlocked) ? '' : 'none';
+  document.getElementById('session-unlock-btn').style.display = (hasLocked && !isSessionUnlocked) ? '' : 'none';
+}
 
 fetch('/collections-data').then(function(r){ return r.json(); }).then(function(d){
   allCols = d.collections || [];
+  isSessionUnlocked = d.unlocked || false;
   document.getElementById('hcnt').textContent = allCols.length;
   renderSidebar(allCols);
+  updateSessionButtons();
 });
+
+function unlockSession() {
+  var pw = prompt('Enter your password to unlock locked collections:');
+  if (!pw) return;
+  fetch('/unlock', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:pw})})
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (d.ok) { isSessionUnlocked = true; updateSessionButtons(); renderSidebar(allCols); if (curTag) loadCol(curTag); }
+    else { alert('Wrong password.'); }
+  });
+}
+
+function lockSession() {
+  fetch('/lock', {method:'POST'}).then(function(){
+    isSessionUnlocked = false; updateSessionButtons(); renderSidebar(allCols);
+    if (curTag) { var col = allCols.find(function(c){ return c.tag === curTag; }); if (col && col.locked) loadCol(curTag); }
+  });
+}
+
+function setCollectionLock(tag, lock) {
+  fetch('/collection-meta?tag=' + encodeURIComponent(tag), {
+    method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({locked: lock ? 1 : 0})
+  }).then(function(){
+    var col = allCols.find(function(c){ return c.tag === tag; });
+    if (col) col.locked = lock;
+    updateSessionButtons();
+    renderSidebar(allCols);
+    loadCol(tag);
+  });
+}
 
 function filterCols() {
   var q = document.getElementById('search').value.toLowerCase();
@@ -1132,8 +1181,9 @@ function renderSidebar(cols) {
   var html = '';
   for (var i = 0; i < cols.length; i++) {
     var c = cols[i];
-    html += '<div class="col-item' + (c.tag === curTag ? ' active' : '') + '" data-tag="' + esc(c.tag) + '">';
-    html += '<div class="col-name">' + esc(c.name || c.tag) + '</div>';
+    var cls = 'col-item' + (c.tag === curTag ? ' active' : '') + (c.locked ? ' locked' : '');
+    html += '<div class="' + cls + '" data-tag="' + esc(c.tag) + '">';
+    html += '<div class="col-name">' + (c.locked ? (isSessionUnlocked ? '&#128275; ' : '&#128274; ') : '') + esc(c.name || c.tag) + '</div>';
     html += '<div class="col-meta">' + c.count + ' links';
     if (c.latest) html += ' &middot; ' + fmtDate(c.latest);
     html += '</div></div>';
@@ -1150,15 +1200,30 @@ function loadCol(tag) {
   renderSidebar(allCols);
   var col = allCols.find(function(c){ return c.tag === tag; });
   var main = document.getElementById('main');
+
+  if (col && col.locked && !isSessionUnlocked) {
+    main.innerHTML = '<div class="locked-panel">'
+      + '<div class="lock-icon">&#128274;</div>'
+      + '<div class="lock-msg">This collection is locked</div>'
+      + '<div class="lock-sub">Unlock to view its links</div>'
+      + '<button class="btn btn-blue" onclick="unlockSession()">&#128275; Unlock</button>'
+      + '</div>';
+    return;
+  }
+
   main.innerHTML = '<div class="no-sel">Loading...</div>';
   fetch('/collection-links?tag=' + encodeURIComponent(tag)).then(function(r){ return r.json(); }).then(function(d){
     curLinks = d.links || [];
+    var lockBtn = col.locked
+      ? '<button class="btn btn-lock" onclick="setCollectionLock(\'' + esc(tag) + '\', false)">&#128275; Remove Lock</button>'
+      : '<button class="btn btn-gray" onclick="setCollectionLock(\'' + esc(tag) + '\', true)">&#128274; Lock this</button>';
     var html = '<div class="mhead">';
     html += '<input class="mtitle" id="mtitle" value="' + esc(col.name || col.tag) + '" onblur="saveMeta()">';
     html += '<textarea class="mdesc" id="mdesc" rows="2" placeholder="Add a description..." onblur="saveMeta()">' + esc(col.description || '') + '</textarea>';
     html += '<div class="mactions">';
     html += '<button class="btn btn-blue" onclick="openAll()">&#128193; Open all (' + curLinks.length + ')</button>';
     html += '<button class="btn btn-gray" onclick="copyUrls(this)">&#8682; Copy URLs</button>';
+    html += lockBtn;
     html += '<span class="mcnt">' + curLinks.length + ' links';
     if (col.latest) html += ' &middot; ' + fmtDate(col.latest);
     html += '</span></div></div>';
@@ -1243,6 +1308,18 @@ function copyUrls(btn) {
 <\/scr` + `ipt>
 </body>
 </html>`;
+  }
+
+  function isUnlocked(request: Request): boolean {
+	const cookies = request.headers.get('Cookie') || '';
+	return cookies.split(';').some(c => c.trim() === 'unlocked=true');
+  }
+
+  async function getLockedTags(env: Env): Promise<string[]> {
+	try {
+	  const { results } = await env.links_db.prepare('SELECT tag FROM tag_metadata WHERE locked = 1').all();
+	  return (results as any[]).map((r: any) => r.tag);
+	} catch { return []; }
   }
 
   function getLoginHTML(error = ''): string {
@@ -1348,9 +1425,13 @@ button:hover { background: #0077ed; }
 		const { results } = await env.links_db.prepare(
 		  'SELECT tags FROM links WHERE tags IS NOT NULL AND tags != "" AND deleted_at IS NULL AND archived_at IS NULL AND is_private = 0'
 		).all();
+		const locked = isUnlocked(request) ? [] : await getLockedTags(env);
 		const tagMap: Record<string, number> = {};
 		results.forEach((row: any) => {
-		  if (row.tags) row.tags.split(',').forEach((t: string) => { const tag = t.trim(); if (tag) tagMap[tag] = (tagMap[tag] || 0) + 1; });
+		  if (row.tags) row.tags.split(',').forEach((t: string) => {
+			const tag = t.trim();
+			if (tag && !locked.includes(tag)) tagMap[tag] = (tagMap[tag] || 0) + 1;
+		  });
 		});
 		return new Response(JSON.stringify(tagMap), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 	  }
@@ -1360,7 +1441,8 @@ button:hover { background: #0077ed; }
 	  }
 
 	  if (request.method === 'GET' && path === '/collections-data') {
-		await env.links_db.prepare('CREATE TABLE IF NOT EXISTS tag_metadata (id INTEGER PRIMARY KEY AUTOINCREMENT, tag TEXT NOT NULL UNIQUE, name TEXT, description TEXT, created_at DATETIME DEFAULT (datetime(\'now\')))').run();
+		await env.links_db.prepare('CREATE TABLE IF NOT EXISTS tag_metadata (id INTEGER PRIMARY KEY AUTOINCREMENT, tag TEXT NOT NULL UNIQUE, name TEXT, description TEXT, locked INTEGER DEFAULT 0, created_at DATETIME DEFAULT (datetime(\'now\')))').run();
+		try { await env.links_db.prepare('ALTER TABLE tag_metadata ADD COLUMN locked INTEGER DEFAULT 0').run(); } catch {}
 		const { results: rows } = await env.links_db.prepare('SELECT tags, created_at FROM links WHERE deleted_at IS NULL AND tags IS NOT NULL AND tags != \'\'').all();
 		const tagMap = new Map<string, { count: number; latest: string }>();
 		for (const row of rows as any[]) {
@@ -1375,14 +1457,18 @@ button:hover { background: #0077ed; }
 		const metaMap: Record<string, any> = {};
 		(meta as any[]).forEach((m: any) => { metaMap[m.tag] = m; });
 		const collections = Array.from(tagMap.entries())
-		  .map(([tag, d]) => ({ tag, count: d.count, latest: d.latest, name: metaMap[tag]?.name || null, description: metaMap[tag]?.description || null }))
+		  .map(([tag, d]) => ({ tag, count: d.count, latest: d.latest, name: metaMap[tag]?.name || null, description: metaMap[tag]?.description || null, locked: metaMap[tag]?.locked ? true : false }))
 		  .sort((a, b) => (b.latest > a.latest ? 1 : -1));
-		return new Response(JSON.stringify({ collections }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+		return new Response(JSON.stringify({ collections, unlocked: isUnlocked(request) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 	  }
 
 	  if (request.method === 'GET' && path === '/collection-links') {
 		const tag = url.searchParams.get('tag') || '';
 		if (!tag) return new Response(JSON.stringify({ links: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+		const lockedTags = await getLockedTags(env);
+		if (lockedTags.includes(tag) && !isUnlocked(request)) {
+		  return new Response(JSON.stringify({ links: [], locked: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+		}
 		const { results } = await env.links_db.prepare(
 		  'SELECT * FROM links WHERE deleted_at IS NULL AND (tags = ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ?) ORDER BY created_at DESC'
 		).bind(tag, tag + ',%', '%, ' + tag, '%,' + tag + ',%').all();
@@ -1393,12 +1479,33 @@ button:hover { background: #0077ed; }
 	  if (request.method === 'PATCH' && path === '/collection-meta') {
 		const tag = url.searchParams.get('tag') || '';
 		if (!tag) return new Response(JSON.stringify({ error: 'tag required' }), { status: 400, headers: corsHeaders });
-		const body = await request.json() as { name?: string; description?: string };
-		await env.links_db.prepare('INSERT INTO tag_metadata (tag, name, description) VALUES (?, ?, ?) ON CONFLICT(tag) DO UPDATE SET name = excluded.name, description = excluded.description')
-		  .bind(tag, body.name || '', body.description || '').run();
+		const body = await request.json() as { name?: string; description?: string; locked?: number };
+		await env.links_db.prepare('INSERT OR IGNORE INTO tag_metadata (tag) VALUES (?)').bind(tag).run();
+		const fields: string[] = [], vals: any[] = [];
+		if (body.name !== undefined) { fields.push('name = ?'); vals.push(body.name); }
+		if (body.description !== undefined) { fields.push('description = ?'); vals.push(body.description); }
+		if (body.locked !== undefined) { fields.push('locked = ?'); vals.push(body.locked); }
+		if (fields.length) await env.links_db.prepare('UPDATE tag_metadata SET ' + fields.join(', ') + ' WHERE tag = ?').bind(...vals, tag).run();
 		return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 	  }
   
+
+  if (request.method === 'POST' && path === '/unlock') {
+	const body = await request.json() as { password: string };
+	const validPassword = ((env.LOGIN_PASSWORD || env.API_TOKEN) || '').trim();
+	if ((body.password || '').trim() === validPassword) {
+	  return new Response(JSON.stringify({ ok: true }), {
+		headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Set-Cookie': 'unlocked=true; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=3600' },
+	  });
+	}
+	return new Response(JSON.stringify({ error: 'Wrong password' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  if (request.method === 'POST' && path === '/lock') {
+	return new Response(JSON.stringify({ ok: true }), {
+	  headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Set-Cookie': 'unlocked=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0' },
+	});
+  }
 
   if (request.method === 'GET' && path === '/import') {
 	const importHtml = `<!DOCTYPE html>
@@ -1755,6 +1862,13 @@ function savePasted() {
 		if (tagsParam && view === 'all') {
 		  tagsParam.split(',').map((t: string) => t.trim()).filter(Boolean).forEach((tag: string) => {
 			conditions.push('(tags = ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ?)');
+			params.push(tag, tag + ',%', '%,' + tag, '%, ' + tag, '%,' + tag + ',%', '%, ' + tag + ',%');
+		  });
+		}
+		if (!isUnlocked(request)) {
+		  const lockedTags = await getLockedTags(env);
+		  lockedTags.forEach((tag: string) => {
+			conditions.push('(tags != ? AND tags NOT LIKE ? AND tags NOT LIKE ? AND tags NOT LIKE ? AND tags NOT LIKE ? AND tags NOT LIKE ?)');
 			params.push(tag, tag + ',%', '%,' + tag, '%, ' + tag, '%,' + tag + ',%', '%, ' + tag + ',%');
 		  });
 		}
