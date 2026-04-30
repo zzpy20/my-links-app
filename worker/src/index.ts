@@ -25,6 +25,10 @@ interface Env {
 	}
   }
   
+  function normalizeTags(tags: string): string {
+    return tags.split(',').map((t: string) => t.trim().toLowerCase()).filter(Boolean).join(', ');
+  }
+
   async function applyRules(url: string, existingTags: string, env: Env, title: string = '', caption: string = ''): Promise<string> {
 	try {
 	  const { results } = await env.links_db.prepare('SELECT * FROM tag_rules WHERE enabled = 1').all();
@@ -33,7 +37,7 @@ interface Env {
 	  const urlLower = url.toLowerCase();
 	  const titleLower = title.toLowerCase();
 	  const captionLower = caption.toLowerCase();
-	  const existing = existingTags ? existingTags.split(',').map((t: string) => t.trim()).filter(Boolean) : [];
+	  const existing = existingTags ? existingTags.split(',').map((t: string) => t.trim().toLowerCase()).filter(Boolean) : [];
 	  const toAdd: string[] = [];
 	  for (const rule of results as any[]) {
 		if (!rule.enabled) continue;
@@ -45,7 +49,7 @@ interface Env {
 		  matched = patterns.some((p: string) => urlLower.includes(p) || titleLower.includes(p) || captionLower.includes(p));
 		}
 		if (matched) {
-		  const ruleTags = rule.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+		  const ruleTags = rule.tags.split(',').map((t: string) => t.trim().toLowerCase()).filter(Boolean);
 		  ruleTags.forEach((t: string) => { if (!existing.includes(t) && !toAdd.includes(t)) toAdd.push(t); });
 		}
 	  }
@@ -103,8 +107,11 @@ interface Env {
   .view-btns { display: flex; border: 1px solid #d2d2d7; border-radius: 8px; overflow: hidden; }
   .view-btn { background: white; border: none; padding: 7px 13px; cursor: pointer; font-size: 17px; line-height: 1; }
   .view-btn.active { background: #0071e3; color: white; }
-  .trash-btn { background: none; border: 1px solid #d2d2d7; border-radius: 8px; padding: 7px 10px; font-size: 16px; cursor: pointer; color: #6e6e73; }
-  .trash-btn:hover { background: #fff0f0; border-color: #ff3b30; color: #ff3b30; }
+  .trash-btn { background: none; border: 1px solid #d2d2d7; border-radius: 8px; padding: 8px 10px; cursor: pointer; color: #6e6e73; display: inline-flex; align-items: center; justify-content: center; position: relative; }
+  .trash-btn:hover { background: #f5f5f7; border-color: #aeaeb2; color: #1d1d1f; }
+  .trash-badge { position: absolute; top: -5px; right: -5px; background: #ff3b30; color: white; border-radius: 9px; font-size: 10px; font-weight: 700; min-width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; padding: 0 3px; pointer-events: none; line-height: 1; }
+  .trash-btn[data-tip]::after { content: attr(data-tip); position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); background: rgba(29,29,31,0.88); color: white; padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.12s; transition-delay: 0s; z-index: 50; }
+  .trash-btn[data-tip]:hover::after { opacity: 1; transition-delay: 0.5s; }
   .tab-bar { background: white; border-bottom: 1px solid #e5e5e5; display: flex; padding: 0 24px; transition: opacity 0.2s; }
   .tab-bar.search-mode { opacity: 0.35; pointer-events: none; }
   .tab { padding: 12px 20px; font-size: 14px; font-weight: 600; color: #6e6e73; cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1px; display: flex; align-items: center; gap: 6px; user-select: none; }
@@ -216,7 +223,7 @@ interface Env {
   .bdel { background: #ff3b30; color: white; border: none; border-radius: 10px; padding: 8px 18px; font-size: 14px; cursor: pointer; margin-right: auto; }
   .rpanel { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: none; align-items: flex-start; justify-content: center; padding-top: 40px; }
   .rpanel.open { display: flex; }
-  .rbox { background: white; border-radius: 16px; width: 90%; max-width: 640px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+  .rbox { background: white; border-radius: 16px; width: 90%; max-width: 640px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.2); overflow: hidden; }
   .rhead { display: flex; align-items: center; padding: 16px 20px; border-bottom: 1px solid #e5e5e5; }
   .rhead-title { font-size: 18px; font-weight: 700; }
   .rhead-sub { font-size: 13px; color: #6e6e73; margin-left: 8px; }
@@ -239,6 +246,33 @@ interface Env {
   .rinput:focus { border-color: #0071e3; }
   .radd-btn { background: #0071e3; color: white; border: none; border-radius: 8px; padding: 8px 16px; font-size: 14px; cursor: pointer; font-weight: 600; white-space: nowrap; }
   .rempty { text-align: center; padding: 40px; color: #aeaeb2; font-size: 14px; }
+  .rrun-item { background: none; border: none; color: #34c759; font-size: 14px; cursor: pointer; padding: 0 4px; }
+  .rprev { border-top: 1px solid #e5e5e5; overflow-y: auto; max-height: 280px; }
+  .rprev-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: #f0faf3; border-bottom: 1px solid #c6eed1; position: sticky; top: 0; }
+  .rprev-header span { font-size: 13px; font-weight: 600; color: #1d1d1f; }
+  .rprev-item { padding: 9px 16px; border-bottom: 1px solid #f5f5f7; }
+  .rprev-title { font-size: 13px; font-weight: 500; color: #1d1d1f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rprev-tags { font-size: 12px; margin-top: 2px; }
+  .rprev-old { color: #6e6e73; }
+  .rprev-new { color: #1a8d3f; font-weight: 600; }
+  .rprev-more { padding: 10px 16px; font-size: 12px; color: #aeaeb2; text-align: center; }
+  .rprev-empty { padding: 20px 16px; font-size: 13px; color: #6e6e73; text-align: center; }
+  .tgpanel { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: none; align-items: flex-start; justify-content: center; padding-top: 40px; }
+  .tgpanel.open { display: flex; }
+  .tgbox { background: white; border-radius: 16px; width: 90%; max-width: 520px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.2); overflow: hidden; }
+  .tghead { display: flex; align-items: center; padding: 16px 20px; border-bottom: 1px solid #e5e5e5; }
+  .tghead-title { font-size: 18px; font-weight: 700; }
+  .tghead-sub { font-size: 13px; color: #6e6e73; margin-left: 8px; }
+  .tghead-close { margin-left: auto; background: none; border: none; font-size: 20px; cursor: pointer; color: #6e6e73; }
+  .tglist { overflow-y: auto; flex: 1; }
+  .tgrow { display: flex; align-items: center; padding: 10px 16px; border-bottom: 1px solid #f5f5f7; gap: 8px; }
+  .tgrow:last-child { border-bottom: none; }
+  .tgname { font-size: 14px; font-weight: 500; flex: 1; }
+  .tgcount { font-size: 12px; color: #aeaeb2; white-space: nowrap; }
+  .tgedit { background: none; border: none; color: #0071e3; font-size: 14px; cursor: pointer; padding: 0 4px; }
+  .tgdel { background: none; border: none; color: #ff3b30; font-size: 14px; cursor: pointer; padding: 0 4px; }
+  .tginput { border: 1px solid #0071e3; border-radius: 6px; padding: 5px 9px; font-size: 14px; outline: none; flex: 1; min-width: 0; }
+  .tgempty { text-align: center; padding: 40px; color: #aeaeb2; font-size: 14px; }
   .tpanel { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: none; align-items: flex-start; justify-content: center; padding-top: 40px; }
   .tpanel.open { display: flex; }
   .tbox { background: white; border-radius: 16px; width: 90%; max-width: 700px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
@@ -271,10 +305,12 @@ interface Env {
 	  <button class="view-btn active" id="btn-grid" onclick="setView('grid')">&#9783;</button>
 	  <button class="view-btn" id="btn-list" onclick="setView('list')">&#9776;</button>
 	</div>
-	<button class="trash-btn" onclick="openTrash()">&#128465;</button>
-	<button class="trash-btn" onclick="openRules()" title="Auto-tag Rules">&#9881;</button>
-	<button class="trash-btn" onclick="location.href='/import'" title="Import Bookmarks" style="color:#0071e3;border-color:#0071e3;">&#128228;</button>
-	<button class="trash-btn" onclick="location.href='/collections'" title="Collections" style="color:#5856d6;border-color:#5856d6;">&#128193;</button>
+	<button class="trash-btn" onclick="openTrash()" data-tip="Trash"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="19" height="19"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"/></svg><span id="trash-badge" class="trash-badge" style="display:none"></span></button>
+	<button class="trash-btn" onclick="openRules()" data-tip="Auto-tag Rules"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="19" height="19"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg></button>
+	<button class="trash-btn" onclick="openTagPanel()" data-tip="Tag Manager"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="19" height="19"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6Z"/></svg></button>
+	<button class="trash-btn" onclick="location.href='/import'" data-tip="Import Bookmarks" style="color:#0071e3;border-color:#0071e3;"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="19" height="19"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg></button>
+	<button class="trash-btn" onclick="location.href='/collections'" data-tip="Collections" style="color:#5856d6;border-color:#5856d6;"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="19" height="19"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z"/></svg></button>
+	<button class="trash-btn" onclick="doLogout()" data-tip="Lock / Log out" style="color:#ff3b30;border-color:#ff3b30;"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="19" height="19"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z"/></svg></button>
   </header>
   <div class="tab-bar" id="tab-bar">
 	<div class="tab active" id="tab-all" onclick="switchTab('all')">&#128279; All <span class="tab-count" id="cnt-all">0</span></div>
@@ -327,6 +363,7 @@ interface Env {
 		<button class="rhead-close" onclick="closeRules()">&#x2715;</button>
 	  </div>
 	  <div class="rlist" id="rlist"></div>
+	  <div class="rprev" id="rprev" style="display:none"></div>
 	  <div class="radd">
 		<h4>Add New Rule</h4>
 		<div class="radd-row">
@@ -354,6 +391,16 @@ interface Env {
 		</div>
 	  </div>
 	  <div class="tlist" id="tlist"></div>
+	</div>
+  </div>
+  <div class="tgpanel" id="tgpanel">
+	<div class="tgbox">
+	  <div class="tghead">
+		<span class="tghead-title">&#127991; Tag Manager</span>
+		<span class="tghead-sub">Rename or remove tags</span>
+		<button class="tghead-close" onclick="closeTagPanel()">&#x2715;</button>
+	  </div>
+	  <div class="tglist" id="tglist"></div>
 	</div>
   </div>
   <script>
@@ -685,6 +732,14 @@ interface Env {
 	fetch('/links/' + id, {method:'DELETE'}).then(function() { load(); loadTags(); });
   }
   
+  function updateTrashBadge() {
+	fetch('/trash-count').then(function(r){return r.json();}).then(function(d){
+	  var badge = document.getElementById('trash-badge');
+	  if (d.count > 0) { badge.textContent = d.count > 99 ? '99+' : String(d.count); badge.style.display = 'flex'; }
+	  else { badge.style.display = 'none'; }
+	});
+  }
+
   function openTrash() { document.getElementById('tpanel').classList.add('open'); loadTrash(); }
   function closeTrash() { document.getElementById('tpanel').classList.remove('open'); }
   
@@ -717,19 +772,19 @@ interface Env {
 	});
   }
   function restoreLink(id) {
-	fetch('/links/' + id + '/restore', {method:'POST'}).then(function() { loadTrash(); load(); loadTags(); });
+	fetch('/links/' + id + '/restore', {method:'POST'}).then(function() { loadTrash(); load(); loadTags(); updateTrashBadge(); });
   }
   function permDelete(id) {
 	if (!confirm('Permanently delete? This cannot be undone.')) return;
-	fetch('/links/' + id + '/permanent', {method:'DELETE'}).then(function() { loadTrash(); });
+	fetch('/links/' + id + '/permanent', {method:'DELETE'}).then(function() { loadTrash(); updateTrashBadge(); });
   }
   function restoreAll() {
 	if (!confirm('Restore all items from trash?')) return;
-	fetch('/trash/restore-all', {method:'POST'}).then(function() { loadTrash(); load(); loadTags(); });
+	fetch('/trash/restore-all', {method:'POST'}).then(function() { loadTrash(); load(); loadTags(); updateTrashBadge(); });
   }
   function deleteAll() {
 	if (!confirm('Permanently delete all items in trash? This cannot be undone.')) return;
-	fetch('/trash/empty', {method:'DELETE'}).then(function() { loadTrash(); });
+	fetch('/trash/empty', {method:'DELETE'}).then(function() { loadTrash(); updateTrashBadge(); });
   }
   
   function updateSelBar() {
@@ -835,7 +890,7 @@ interface Env {
 	if (selectedIds.size === 0) return;
 	if (!confirm('Move ' + selectedIds.size + ' item(s) to trash?')) return;
 	Promise.all(Array.from(selectedIds).map(function(id){return fetch('/links/'+id,{method:'DELETE'});}))
-	.then(function() { clearSel(); load(curSearch, curPage); loadTags(); });
+	.then(function() { clearSel(); load(curSearch, curPage); loadTags(); updateTrashBadge(); });
   }
   
   function addNewTag() {
@@ -951,8 +1006,68 @@ interface Env {
 	setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
   }
   
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function doLogout() { location.href = '/logout'; }
+
   function openRules() { document.getElementById('rpanel').classList.add('open'); loadRules(); }
   function closeRules() { document.getElementById('rpanel').classList.remove('open'); }
+
+  function openTagPanel() { document.getElementById('tgpanel').classList.add('open'); loadTagPanel(); }
+  function closeTagPanel() { document.getElementById('tgpanel').classList.remove('open'); }
+
+  function loadTagPanel() {
+	var list = document.getElementById('tglist');
+	list.innerHTML = '<div class="tgempty">Loading...</div>';
+	fetch('/tags-admin').then(function(r){return r.json();}).then(function(tags){
+	  if (!tags.length) { list.innerHTML = '<div class="tgempty">No tags found.</div>'; return; }
+	  list.innerHTML = '';
+	  tags.forEach(function(t) {
+		var row = document.createElement('div'); row.className = 'tgrow';
+		var name = document.createElement('span'); name.className = 'tgname'; name.textContent = t.tag; row.appendChild(name);
+		var cnt = document.createElement('span'); cnt.className = 'tgcount'; cnt.textContent = t.count + ' link' + (t.count !== 1 ? 's' : ''); row.appendChild(cnt);
+		var editBtn = document.createElement('button'); editBtn.className = 'tgedit'; editBtn.innerHTML = '&#9998;'; editBtn.title = 'Rename';
+		editBtn.onclick = (function(tag, row){return function(){startTagRename(tag, row);};})(t.tag, row); row.appendChild(editBtn);
+		var delBtn = document.createElement('button'); delBtn.className = 'tgdel'; delBtn.innerHTML = '&#x2715;'; delBtn.title = 'Remove tag';
+		delBtn.onclick = (function(tag, count){return function(){deleteTag(tag, count);};})(t.tag, t.count); row.appendChild(delBtn);
+		list.appendChild(row);
+	  });
+	});
+  }
+
+  function startTagRename(tag, row) {
+	var orig = row.innerHTML;
+	row.innerHTML = '';
+	var input = document.createElement('input'); input.type = 'text'; input.className = 'tginput'; input.value = tag;
+	var saveBtn = document.createElement('button'); saveBtn.className = 'radd-btn'; saveBtn.textContent = 'Save';
+	saveBtn.style.cssText = 'font-size:13px;padding:5px 14px;white-space:nowrap';
+	var cancelBtn = document.createElement('button'); cancelBtn.className = 'tgdel'; cancelBtn.style.fontSize = '13px'; cancelBtn.textContent = 'Cancel';
+	cancelBtn.onclick = function() { row.innerHTML = orig; };
+	saveBtn.onclick = function() {
+	  var newTag = input.value.trim();
+	  if (!newTag || newTag === tag) { row.innerHTML = orig; return; }
+	  fetch('/rename-tag', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({from:tag, to:newTag})})
+	  .then(function(r){return r.json();}).then(function(d){
+		if (d.ok) { loadTagPanel(); loadTags(); }
+		else { alert('Rename failed: ' + (d.error||'unknown')); row.innerHTML = orig; }
+	  });
+	};
+	input.addEventListener('keydown', function(e){
+	  if (e.key === 'Enter') saveBtn.onclick();
+	  if (e.key === 'Escape') { row.innerHTML = orig; }
+	});
+	[input, saveBtn, cancelBtn].forEach(function(el){ row.appendChild(el); });
+	input.focus(); input.select();
+  }
+
+  function deleteTag(tag, count) {
+	if (!confirm('Remove tag "' + tag + '" from ' + count + ' link' + (count !== 1 ? 's' : '') + '? The links will not be deleted.')) return;
+	fetch('/delete-tag', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tag:tag})})
+	.then(function(r){return r.json();}).then(function(d){
+	  if (d.ok) { loadTagPanel(); loadTags(); load('', 1); }
+	  else alert('Delete failed: ' + (d.error||'unknown'));
+	});
+  }
   
   function loadRules() {
 	fetch('/rules').then(function(r){return r.json();}).then(function(rules) {
@@ -966,6 +1081,8 @@ interface Env {
 		var tags = document.createElement('div'); tags.className = 'rtags'; tags.textContent = '\u2192 ' + r.tags; div.appendChild(tags);
 		var tog = document.createElement('button'); tog.className = 'rtoggle'; tog.textContent = r.enabled ? 'On' : 'Off';
 		tog.onclick = (function(id,en){return function(){toggleRule(id,en?0:1);};})(r.id,r.enabled); div.appendChild(tog);
+		var run = document.createElement('button'); run.className = 'rrun-item'; run.innerHTML = '&#9654;'; run.title = 'Preview run this rule';
+		run.onclick = (function(id){return function(){previewRun(id);};})(r.id); div.appendChild(run);
 		var edit = document.createElement('button'); edit.className = 'redit'; edit.innerHTML = '&#9998;'; edit.title = 'Edit';
 		edit.onclick = (function(id,type,pattern,tags,d){return function(){editRule(id,type,pattern,tags,d);};})(r.id,r.type,r.pattern,r.tags,div); div.appendChild(edit);
 		var del = document.createElement('button'); del.className = 'rdel'; del.innerHTML = '&#x2715;';
@@ -991,6 +1108,63 @@ interface Env {
   function deleteRule(id) {
 	if (!confirm('Delete this rule?')) return;
 	fetch('/rules/'+id, {method:'DELETE'}).then(function(){loadRules();});
+  }
+
+  var _previewRuleId = null;
+
+  function previewRun(ruleId) {
+	_previewRuleId = ruleId;
+	var el = document.getElementById('rprev');
+	el.innerHTML = '<div class="rprev-empty">Running...</div>';
+	el.style.display = 'block';
+	fetch('/rules/run?dry=true&rule_id=' + ruleId, {method:'POST'})
+	.then(function(r){
+	  if (!r.ok) return r.text().then(function(t){ throw new Error('HTTP ' + r.status + ': ' + t.slice(0,200)); });
+	  return r.json();
+	})
+	.then(function(d){ showRunPreview(d); })
+	.catch(function(err){ el.innerHTML = '<div class="rprev-empty">Error: ' + esc(String(err.message||err).slice(0,200)) + '</div>'; });
+  }
+
+  function showRunPreview(d) {
+	var el = document.getElementById('rprev');
+	var changes = d.changes || [];
+	var total = d.total || 0;
+	if (!total) {
+	  el.innerHTML = '<div class="rprev-empty">No links would be affected by the current rules.</div>';
+	  el.style.display = 'block';
+	  return;
+	}
+	var html = '<div class="rprev-header"><span>' + total + ' link' + (total !== 1 ? 's' : '') + ' would be updated</span>';
+	html += '<div style="display:flex;gap:8px;align-items:center">';
+	html += '<button class="radd-btn" style="font-size:12px;padding:5px 12px" onclick="applyRun()">&#10003; Apply</button>';
+	html += '<button style="background:none;border:none;color:#6e6e73;font-size:13px;cursor:pointer" onclick="cancelPreview()">Cancel</button>';
+	html += '</div></div>';
+	changes.forEach(function(c) {
+	  html += '<div class="rprev-item"><div class="rprev-title">' + esc(c.title || c.url) + '</div>';
+	  html += '<div class="rprev-tags"><span class="rprev-old">' + esc(c.oldTags || '(none)') + '</span>';
+	  html += ' <span style="color:#aeaeb2">&#8594;</span> <span class="rprev-new">' + esc(c.newTags) + '</span></div></div>';
+	});
+	if (total > changes.length) {
+	  html += '<div class="rprev-more">...and ' + (total - changes.length) + ' more</div>';
+	}
+	el.innerHTML = html;
+	el.style.display = 'block';
+  }
+
+  function cancelPreview() {
+	document.getElementById('rprev').style.display = 'none';
+  }
+
+  function applyRun() {
+	fetch('/rules/run?rule_id=' + _previewRuleId, {method:'POST'})
+	.then(function(r){return r.json();})
+	.then(function(d){
+	  document.getElementById('rprev').style.display = 'none';
+	  _previewRuleId = null;
+	  alert('Done! ' + d.updated + ' link' + (d.updated !== 1 ? 's' : '') + ' updated.');
+	  load('', 1);
+	});
   }
 
   function editRule(id, type, pattern, tags, div) {
@@ -1027,6 +1201,7 @@ interface Env {
   
   loadTags();
   load('', 1);
+  updateTrashBadge();
   </script>
   </body>
   </html>`;
@@ -1368,6 +1543,16 @@ button:hover { background: #0077ed; }
 	  }
 
 	  // Login route (no auth required)
+	  if (path === '/logout') {
+		return new Response(null, {
+		  status: 302,
+		  headers: {
+			'Location': '/login',
+			'Set-Cookie': 'session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0',
+		  },
+		});
+	  }
+
 	  if (path === '/login') {
 		if (request.method === 'GET') {
 		  return new Response(getLoginHTML(), { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
@@ -1382,7 +1567,7 @@ button:hover { background: #0077ed; }
 			  status: 302,
 			  headers: {
 				'Location': '/',
-				'Set-Cookie': `session=${apiToken}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=31536000`,
+				'Set-Cookie': `session=${apiToken}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=31536000`,
 			  },
 			});
 		  }
@@ -1403,8 +1588,7 @@ button:hover { background: #0077ed; }
 	  const hasValidToken = apiToken && (
 		tokenFromHeader.trim() === apiToken ||
 		tokenFromQuery.trim() === apiToken ||
-		sessionCookie === apiToken ||
-		cookies.includes('CF_Authorization')
+		sessionCookie === apiToken
 	  );
 
 	  if (!hasValidToken) {
@@ -1434,6 +1618,52 @@ button:hover { background: #0077ed; }
 		  });
 		});
 		return new Response(JSON.stringify(tagMap), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+	  }
+
+	  if (request.method === 'GET' && path === '/tags-admin') {
+		const { results } = await env.links_db.prepare(
+		  'SELECT tags FROM links WHERE tags IS NOT NULL AND tags != "" AND deleted_at IS NULL'
+		).all();
+		const tagMap: Record<string, number> = {};
+		results.forEach((row: any) => {
+		  row.tags.split(',').forEach((t: string) => { const tag = t.trim(); if (tag) tagMap[tag] = (tagMap[tag] || 0) + 1; });
+		});
+		const sorted = Object.entries(tagMap).map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count);
+		return new Response(JSON.stringify(sorted), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+	  }
+
+	  if (request.method === 'POST' && path === '/rename-tag') {
+		const body = await request.json() as { from: string; to: string };
+		const fromTag = (body.from || '').trim().toLowerCase();
+		const toTag = (body.to || '').trim().toLowerCase();
+		if (!fromTag || !toTag || fromTag === toTag) return new Response(JSON.stringify({ error: 'Invalid tags' }), { status: 400, headers: corsHeaders });
+		const { results: affected } = await env.links_db.prepare(
+		  'SELECT id, tags FROM links WHERE deleted_at IS NULL AND (tags = ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ?)'
+		).bind(fromTag, fromTag + ',%', '%,' + fromTag, '%, ' + fromTag, '%,' + fromTag + ',%', '%, ' + fromTag + ',%').all();
+		const stmts = (affected as any[]).map((row: any) => {
+		  const newTags = row.tags.split(',').map((t: string) => t.trim() === fromTag ? toTag : t.trim()).join(', ');
+		  return env.links_db.prepare('UPDATE links SET tags = ? WHERE id = ?').bind(newTags, row.id);
+		});
+		if (stmts.length) await env.links_db.batch(stmts);
+		try { await env.links_db.prepare('DELETE FROM tag_metadata WHERE tag = ?').bind(toTag).run(); } catch {}
+		try { await env.links_db.prepare('UPDATE tag_metadata SET tag = ?, name = NULL WHERE tag = ?').bind(toTag, fromTag).run(); } catch {}
+		return new Response(JSON.stringify({ ok: true, updated: stmts.length }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+	  }
+
+	  if (request.method === 'POST' && path === '/delete-tag') {
+		const body = await request.json() as { tag: string };
+		const tag = (body.tag || '').trim();
+		if (!tag) return new Response(JSON.stringify({ error: 'tag required' }), { status: 400, headers: corsHeaders });
+		const { results: affected } = await env.links_db.prepare(
+		  'SELECT id, tags FROM links WHERE deleted_at IS NULL AND (tags = ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ?)'
+		).bind(tag, tag + ',%', '%,' + tag, '%, ' + tag, '%,' + tag + ',%', '%, ' + tag + ',%').all();
+		const stmts = (affected as any[]).map((row: any) => {
+		  const newTags = row.tags.split(',').map((t: string) => t.trim()).filter((t: string) => t !== tag).join(', ');
+		  return env.links_db.prepare('UPDATE links SET tags = ? WHERE id = ?').bind(newTags, row.id);
+		});
+		if (stmts.length) await env.links_db.batch(stmts);
+		try { await env.links_db.prepare('DELETE FROM tag_metadata WHERE tag = ?').bind(tag).run(); } catch {}
+		return new Response(JSON.stringify({ ok: true, updated: stmts.length }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 	  }
 
 	  if (request.method === 'GET' && path === '/collections') {
@@ -1470,8 +1700,8 @@ button:hover { background: #0077ed; }
 		  return new Response(JSON.stringify({ links: [], locked: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 		}
 		const { results } = await env.links_db.prepare(
-		  'SELECT * FROM links WHERE deleted_at IS NULL AND (tags = ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ?) ORDER BY created_at DESC'
-		).bind(tag, tag + ',%', '%, ' + tag, '%,' + tag + ',%').all();
+		  'SELECT * FROM links WHERE deleted_at IS NULL AND (tags = ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ?) ORDER BY created_at DESC'
+		).bind(tag, tag + ',%', '%,' + tag, '%, ' + tag, '%,' + tag + ',%', '%, ' + tag + ',%').all();
 		const filtered = (results as any[]).filter((r: any) => r.tags.split(',').map((t: string) => t.trim()).includes(tag));
 		return new Response(JSON.stringify({ links: filtered }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 	  }
@@ -1805,7 +2035,7 @@ function savePasted() {
 		const cleanUrl = decodeEntities(body.url);
 		const meta = await getMeta(cleanUrl);
 		const finalTitle = body.title ? decodeEntities(body.title) : (meta.title || cleanUrl);
-		const autoTags = await applyRules(cleanUrl, body.tags || '', env, meta.title || '', body.caption || '');
+		const autoTags = await applyRules(cleanUrl, normalizeTags(body.tags || ''), env, meta.title || '', body.caption || '');
 		await env.links_db.prepare('INSERT INTO links (url, title, description, thumbnail, tags) VALUES (?, ?, ?, ?, ?)')
 		  .bind(cleanUrl, finalTitle, body.caption || meta.description || '', meta.thumbnail || '', autoTags).run();
 		return new Response(JSON.stringify({ ok: true, title: finalTitle }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -1821,7 +2051,7 @@ function savePasted() {
 		  .map((item) => {
 			const cleanUrl = decodeEntities(item.url.trim());
 			const title = item.title ? decodeEntities(item.title) : cleanUrl;
-			const tags = item.tags || '';
+			const tags = normalizeTags(item.tags || '');
 			return env.links_db.prepare('INSERT INTO links (url, title, tags) VALUES (?, ?, ?)')
 			  .bind(cleanUrl, title, tags);
 		  });
@@ -1879,7 +2109,11 @@ function savePasted() {
 		return new Response(JSON.stringify({ results, total, page, perPage: pp }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 	  }
   
-	  if (request.method === 'GET' && path === '/trash') {
+	  if (request.method === 'GET' && path === '/trash-count') {
+	  const { results } = await env.links_db.prepare('SELECT COUNT(*) as count FROM links WHERE deleted_at IS NOT NULL').all();
+	  return new Response(JSON.stringify({ count: (results[0] as any)?.count || 0 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  if (request.method === 'GET' && path === '/trash') {
 		const { results } = await env.links_db.prepare('SELECT * FROM links WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC').all();
 		return new Response(JSON.stringify(results), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 	  }
@@ -1891,7 +2125,22 @@ function savePasted() {
 		await env.links_db.prepare('DELETE FROM links WHERE deleted_at IS NOT NULL').run();
 		return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
 	  }
-  
+	  if (request.method === 'POST' && path === '/migrate-tags-lowercase') {
+		const { results } = await env.links_db.prepare('SELECT id, tags FROM links WHERE tags IS NOT NULL AND tags != ""').all();
+		const linkStmts = (results as any[])
+		  .map((row: any) => ({ id: row.id, original: row.tags, normalized: normalizeTags(row.tags) }))
+		  .filter((r: any) => r.normalized !== r.original)
+		  .map((r: any) => env.links_db.prepare('UPDATE links SET tags = ? WHERE id = ?').bind(r.normalized, r.id));
+		if (linkStmts.length) await env.links_db.batch(linkStmts);
+		const { results: metaRows } = await env.links_db.prepare('SELECT id, tag FROM tag_metadata').all();
+		const metaStmts = (metaRows as any[])
+		  .map((row: any) => ({ id: row.id, original: row.tag, normalized: row.tag.trim().toLowerCase() }))
+		  .filter((r: any) => r.normalized !== r.original)
+		  .map((r: any) => env.links_db.prepare('UPDATE tag_metadata SET tag = ? WHERE id = ?').bind(r.normalized, r.id));
+		if (metaStmts.length) await env.links_db.batch(metaStmts);
+		return new Response(JSON.stringify({ ok: true, links_updated: linkStmts.length, meta_updated: metaStmts.length }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+	  }
+
 	  if (request.method === 'POST' && path === '/links/batch-archive') {
 		const body = await request.json() as { ids: number[] };
 		for (const id of body.ids) {
@@ -1905,8 +2154,8 @@ function savePasted() {
 		for (const id of body.ids) {
 		  const row = await env.links_db.prepare('SELECT tags FROM links WHERE id = ?').bind(id).first() as any;
 		  if (!row) continue;
-		  const existing = row.tags ? row.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [];
-		  const incoming = body.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+		  const existing = row.tags ? row.tags.split(',').map((t: string) => t.trim().toLowerCase()).filter(Boolean) : [];
+		  const incoming = body.tags.split(',').map((t: string) => t.trim().toLowerCase()).filter(Boolean);
 		  let newTags: string;
 		  if (body.mode === 'replace') { newTags = incoming.join(', '); }
 		  else if (body.mode === 'remove') { newTags = existing.filter((t: string) => !incoming.includes(t)).join(', '); }
@@ -1947,7 +2196,7 @@ function savePasted() {
 	  if (request.method === 'PATCH' && path.match(/^\/links\/\d+\/edit$/)) {
 		const id = path.split('/')[2];
 		const body = await request.json() as { tags: string; description: string; thumbnail: string };
-		await env.links_db.prepare('UPDATE links SET tags = ?, description = ?, thumbnail = ? WHERE id = ?').bind(body.tags, body.description, body.thumbnail, id).run();
+		await env.links_db.prepare('UPDATE links SET tags = ?, description = ?, thumbnail = ? WHERE id = ?').bind(normalizeTags(body.tags || ''), body.description, body.thumbnail, id).run();
 		return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
 	  }
 	  if (request.method === 'PATCH' && path.match(/^\/links\/\d+\/read$/)) {
@@ -1984,7 +2233,7 @@ function savePasted() {
 	  }
 	  if (request.method === 'POST' && path === '/rules') {
 		const body = await request.json() as { type: string; pattern: string; tags: string };
-		await env.links_db.prepare('INSERT INTO tag_rules (type, pattern, tags) VALUES (?, ?, ?)').bind(body.type, body.pattern, body.tags).run();
+		await env.links_db.prepare('INSERT INTO tag_rules (type, pattern, tags) VALUES (?, ?, ?)').bind(body.type, body.pattern, normalizeTags(body.tags || '')).run();
 		return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
 	  }
 	  if (request.method === 'PATCH' && path.match(/^\/rules\/\d+$/)) {
@@ -1993,7 +2242,7 @@ function savePasted() {
 		const fields: string[] = [], vals: any[] = [];
 		if (body.type !== undefined) { fields.push('type = ?'); vals.push(body.type); }
 		if (body.pattern !== undefined) { fields.push('pattern = ?'); vals.push(body.pattern); }
-		if (body.tags !== undefined) { fields.push('tags = ?'); vals.push(body.tags); }
+		if (body.tags !== undefined) { fields.push('tags = ?'); vals.push(normalizeTags(body.tags)); }
 		if (body.enabled !== undefined) { fields.push('enabled = ?'); vals.push(body.enabled); }
 		if (fields.length) await env.links_db.prepare('UPDATE tag_rules SET ' + fields.join(', ') + ' WHERE id = ?').bind(...vals, id).run();
 		return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
@@ -2003,7 +2252,49 @@ function savePasted() {
 		await env.links_db.prepare('DELETE FROM tag_rules WHERE id = ?').bind(id).run();
 		return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
 	  }
-  
+
+	  if (request.method === 'POST' && path === '/rules/run') { try {
+		const dry = url.searchParams.get('dry') === 'true';
+		const ruleId = url.searchParams.get('rule_id');
+		if (!ruleId) return new Response(JSON.stringify({ error: 'rule_id required' }), { status: 400, headers: corsHeaders });
+		const { results: ruleRows } = await env.links_db.prepare('SELECT * FROM tag_rules WHERE id = ?').bind(ruleId).all();
+		if (!ruleRows.length) return new Response(JSON.stringify({ error: 'Rule not found' }), { status: 404, headers: corsHeaders });
+		const rule = ruleRows[0] as any;
+		const patterns = rule.pattern.split(',').map((p: string) => p.trim().toLowerCase()).filter(Boolean);
+		const ruleTags = rule.tags.split(',').map((t: string) => t.trim().toLowerCase()).filter(Boolean);
+		const { results: allLinks } = await env.links_db.prepare(
+		  'SELECT id, url, title, tags FROM links WHERE deleted_at IS NULL'
+		).all();
+		const changes: { id: number; url: string; title: string; oldTags: string; newTags: string }[] = [];
+		for (const link of allLinks as any[]) {
+		  if (!link.url) continue;
+		  const existing = (link.tags || '').split(',').map((t: string) => t.trim().toLowerCase()).filter(Boolean);
+		  const domain = (() => { try { return new URL(link.url).hostname.replace('www.', ''); } catch { return ''; } })();
+		  const urlLower = link.url.toLowerCase();
+		  const titleLower = (link.title || '').toLowerCase();
+		  let matched = false;
+		  if (rule.type === 'domain') matched = patterns.some((p: string) => domain.includes(p));
+		  else if (rule.type === 'keyword') matched = patterns.some((p: string) => urlLower.includes(p) || titleLower.includes(p));
+		  if (!matched) continue;
+		  const toAdd = ruleTags.filter((t: string) => !existing.includes(t));
+		  if (!toAdd.length) continue;
+		  changes.push({ id: link.id, url: link.url, title: link.title || '', oldTags: link.tags || '', newTags: [...existing, ...toAdd].join(', ') });
+		}
+		if (!dry && changes.length) {
+		  const stmts = changes.map(c => env.links_db.prepare('UPDATE links SET tags = ? WHERE id = ?').bind(c.newTags, c.id));
+		  await env.links_db.batch(stmts);
+		}
+		const PREVIEW_LIMIT = 50;
+		return new Response(JSON.stringify({
+		  ok: true,
+		  total: changes.length,
+		  updated: dry ? 0 : changes.length,
+		  changes: dry ? changes.slice(0, PREVIEW_LIMIT) : [],
+		}), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+	  } catch(e: any) {
+		return new Response(JSON.stringify({ error: String(e.message || e) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+	  } }
+
 	  return new Response('Not found', { status: 404, headers: corsHeaders });
 	},
   };

@@ -294,24 +294,12 @@ function fmtDate(s) {
   
 	  try {
 		const result = await env.DB.prepare(
-		  'SELECT * FROM links WHERE deleted_at IS NULL AND archived_at IS NULL AND is_private = 0 ORDER BY created_at DESC LIMIT 500'
-		).all();
-
-		// Exclude links whose tags are locked
-		let lockedTags = [];
-		try {
-		  const lockedResult = await env.DB.prepare('SELECT tag FROM tag_metadata WHERE locked = 1').all();
-		  lockedTags = (lockedResult.results || []).map(r => r.tag);
-		} catch {}
+		  'SELECT * FROM links WHERE deleted_at IS NULL AND archived_at IS NULL AND is_private = 0' +
+		  ' AND (tags = ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ?)' +
+		  ' ORDER BY created_at DESC LIMIT 500'
+		).bind('public', 'public,%', '%, public', '%,public', '%,public,%', '%, public,%').all();
 
 		let links = result.results || [];
-		if (lockedTags.length) {
-		  links = links.filter(l => {
-			if (!l.tags) return true;
-			const linkTags = l.tags.split(',').map(t => t.trim());
-			return !linkTags.some(t => lockedTags.includes(t));
-		  });
-		}
 
 		const html = getHTML(links);
 		return new Response(html, {
