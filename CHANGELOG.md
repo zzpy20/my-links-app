@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-05-06 — Collections sorting, iPhone shortcut fix
+
+### New Features
+
+**Collections sidebar sorting**
+- Four sort buttons above the collection list: Recent (default), Oldest, A–Z, Z–A
+- Sorting is client-side and works together with the search filter
+- "Oldest" sorts by when the first link with that tag was added (new `earliest` field returned by `/collections-data`)
+
+### Bug Fixes
+
+**iPhone "MY LINKS Share" shortcut**
+- Was using `worker.ausz.workers.dev` (behind Cloudflare Access) → changed to `https://links.1000600.xyz/links`
+- Was using CF-Access service token headers with no Bearer token → added `Authorization: Bearer <token>` header
+
+---
+
 ## 2026-05-01 — Tag normalisation, Tag Manager, Logout, Icons & Bug Fixes
 
 ### New Features
