@@ -183,6 +183,41 @@ describe("admin worker", () => {
 		expect(row.thumbnail).toBe("https://shop.example/products/photo.jpg");
 	});
 
+	it("prefers Amazon landing images over small thumbnails and tracking pixels", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () =>
+				new Response(
+					`<!doctype html>
+					<html>
+						<body>
+							<img height="1" width="1" src="//fls-fe.amazon.com.au/1/batch/track">
+							<img alt="" src="https://m.media-amazon.com/images/I/41a90fnL3rL._AC_US40_.jpg">
+							<img id="landingImage" src="https://m.media-amazon.com/images/I/61DdZ9JekLL._AC_SX300_SY300_QL70_ML2_.jpg" data-old-hires="https://m.media-amazon.com/images/I/61DdZ9JekLL._AC_SL1500_.jpg">
+						</body>
+					</html>`,
+					{ headers: { "Content-Type": "text/html" } },
+				),
+			),
+		);
+
+		const ctx = createExecutionContext();
+		const response = await worker.fetch(
+			new IncomingRequest("http://example.com/links", {
+				method: "POST",
+				headers: { Authorization: `Bearer ${API_TOKEN}`, "Content-Type": "application/json" },
+				body: JSON.stringify({ url: "https://www.amazon.com.au/dp/B09GFFNX5Y" }),
+			}),
+			{ ...env, API_TOKEN },
+			ctx,
+		);
+		await waitOnExecutionContext(ctx);
+
+		expect(response.status).toBe(200);
+		const row = (await env.links_db.prepare("SELECT thumbnail FROM links").first()) as { thumbnail: string };
+		expect(row.thumbnail).toBe("https://m.media-amazon.com/images/I/61DdZ9JekLL._AC_SL1500_.jpg");
+	});
+
 	it("bulk refetches thumbnails only for selected links missing thumbnails", async () => {
 		await env.links_db
 			.prepare("INSERT INTO links (id, url, title, thumbnail) VALUES (?, ?, ?, ?), (?, ?, ?, ?)")

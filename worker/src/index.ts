@@ -37,16 +37,31 @@ interface Env {
 	return '';
   }
 
+  function isUsableImageSrc(src: string): boolean {
+	const lower = src.toLowerCase();
+	if (!src || lower.startsWith('data:')) return false;
+	if (/\.(svg|gif)(\?|#|$)/i.test(lower)) return false;
+	if (/(logo|icon|sprite|spinner|loading|placeholder|avatar|badge|pixel|tracking|\/1\/batch)/i.test(lower)) return false;
+	return /\.(jpe?g|png|webp|avif)(\?|#|$)/i.test(lower);
+  }
+
+  function findPreferredImageSrc(html: string): string {
+	const tags = html.match(/<img\b[^>]*>/gi) || [];
+	for (const tag of tags) {
+	  const id = getAttr(tag, 'id').toLowerCase();
+	  const imageName = getAttr(tag, 'data-a-image-name').toLowerCase();
+	  if (id !== 'landingimage' && imageName !== 'landingimage') continue;
+	  const src = getAttr(tag, 'data-old-hires') || getAttr(tag, 'src');
+	  if (isUsableImageSrc(src)) return src;
+	}
+	return '';
+  }
+
   function findImageSrc(html: string): string {
 	const tags = html.match(/<img\b[^>]*>/gi) || [];
 	for (const tag of tags) {
 	  const src = getAttr(tag, 'src') || getAttr(tag, 'data-src') || getAttr(tag, 'data-original');
-	  if (!src) continue;
-	  const lower = src.toLowerCase();
-	  if (lower.startsWith('data:')) continue;
-	  if (/\.(svg|gif)(\?|#|$)/i.test(lower)) continue;
-	  if (/(logo|icon|sprite|spinner|loading|placeholder|avatar|badge)/i.test(lower)) continue;
-	  return src;
+	  if (isUsableImageSrc(src)) return src;
 	}
 	return '';
   }
@@ -124,6 +139,7 @@ interface Env {
 		  const thumbnail =
 			findMetaContent(html, 'property', ['og:image', 'og:image:url', 'og:image:secure_url']) ||
 			findMetaContent(html, 'name', ['twitter:image', 'twitter:image:src']) ||
+			findPreferredImageSrc(html) ||
 			findImageSrc(html) ||
 			findLinkHref(html, ['apple-touch-icon', 'apple-touch-icon-precomposed', 'icon', 'shortcut']);
 	  return { title: decodeEntities(title), description: decodeEntities(description), thumbnail: resolveUrl(thumbnail, url) };
