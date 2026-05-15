@@ -5,7 +5,7 @@ function fmtDate(s) {
 	});
   }
   
-  function getOfflineHTML() {
+function getOfflineHTML() {
 	return `<!DOCTYPE html>
   <html lang="en">
   <head>
@@ -33,6 +33,13 @@ function fmtDate(s) {
   </body>
   </html>`;
   }
+
+function safeJson(value) {
+	return JSON.stringify(value)
+		.replace(/&/g, "\\u0026")
+		.replace(/</g, "\\u003c")
+		.replace(/>/g, "\\u003e");
+}
   
   function getHTML(links) {
 	return `<!DOCTYPE html>
@@ -121,7 +128,7 @@ function fmtDate(s) {
   </div>
   <div id="con"></div>
   <script>
-  var allLinks = ${JSON.stringify(links)};
+  var allLinks = ${safeJson(links)};
   var cv = 'grid', at = [], tpo = true, st, atm = {};
   var cl = allLinks;
   
@@ -206,10 +213,14 @@ function fmtDate(s) {
   function fmtDate(s) {
 	return new Date(s.endsWith('Z') ? s : s + 'Z').toLocaleString('en-AU', {day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Australia/Brisbane'});
   }
+
+  function esc(s) {
+	return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
   
   function mkTags(tags) {
 	var a = tags ? tags.split(',').filter(function(t) { return t.trim(); }) : [];
-	return a.map(function(t) { return '<span class="tag">' + t.trim() + '</span>'; }).join('');
+	return a.map(function(t) { return '<span class="tag">' + esc(t.trim()) + '</span>'; }).join('');
   }
   
   function render(links) {

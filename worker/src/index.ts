@@ -7,6 +7,10 @@ interface Env {
   function decodeEntities(str: string): string {
 	return str.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
   }
+
+  function escapeHtml(str: string): string {
+	return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
   
   async function processYouTube(url: string): Promise<{ title: string; description: string; thumbnail: string } | null> {
 	const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|m\.youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/);
@@ -546,7 +550,7 @@ interface Env {
   function mkTags(tags) {
 	var a = tags ? tags.split(',').filter(function(t) { return t.trim(); }) : [];
 	var h = '';
-	a.forEach(function(t) { h += '<span class="tag">' + t.trim() + '</span>'; });
+	a.forEach(function(t) { h += '<span class="tag">' + esc(t.trim()) + '</span>'; });
 	return h;
   }
   
@@ -677,7 +681,7 @@ interface Env {
   function openNotes(id) {
 	var l = cl.find(function(x) { return x.id === id; });
 	if (!l) return;
-	showM('<h3>Notes</h3><div class="murl">' + l.url + '</div><textarea id="ni" placeholder="Add notes...">' + (l.notes || '') + '</textarea><div class="mbtns"><button class="bcancel" onclick="clsM()">Cancel</button><button class="bsave" onclick="saveN(' + id + ')">Save</button></div>');
+	showM('<h3>Notes</h3><div class="murl">' + esc(l.url) + '</div><textarea id="ni" placeholder="Add notes...">' + esc(l.notes || '') + '</textarea><div class="mbtns"><button class="bcancel" onclick="clsM()">Cancel</button><button class="bsave" onclick="saveN(' + id + ')">Save</button></div>');
 	setTimeout(function() { var e = document.getElementById('ni'); if (e) e.focus(); }, 50);
   }
   function saveN(id) {
@@ -691,11 +695,11 @@ interface Env {
 	var l = cl.find(function(x) { return x.id === id; });
 	if (!l) return;
 	var tv = l.thumbnail || '';
-	var tphtml = tv ? '<img id="tp" class="tprev" src="' + tv + '">' : '<img id="tp" class="tprev hidden" src="">';
-	showM('<h3>Edit Link</h3><div class="murl">' + l.url + '</div>' +
-	  '<label>Tags (comma separated)</label><input type="text" id="et" value="' + (l.tags || '') + '">' +
-	  '<label>Caption</label><input type="text" id="ec" value="' + (l.description || '').replace(/"/g, '&quot;') + '">' +
-	  '<label>Thumbnail URL</label><input type="text" id="eth" value="' + tv + '" oninput="pvT()" placeholder="https://...">' +
+	var tphtml = tv ? '<img id="tp" class="tprev" src="' + esc(tv) + '">' : '<img id="tp" class="tprev hidden" src="">';
+	showM('<h3>Edit Link</h3><div class="murl">' + esc(l.url) + '</div>' +
+	  '<label>Tags (comma separated)</label><input type="text" id="et" value="' + esc(l.tags || '') + '">' +
+	  '<label>Caption</label><input type="text" id="ec" value="' + esc(l.description || '') + '">' +
+	  '<label>Thumbnail URL</label><input type="text" id="eth" value="' + esc(tv) + '" oninput="pvT()" placeholder="https://...">' +
 	  tphtml +
 	  '<button class="rfbtn" onclick="rfetch(' + id + ')">&#8635; Re-fetch title &amp; thumbnail</button>' +
 	  '<div class="mbtns"><button class="bdel" onclick="delLink(' + id + ')">Delete</button><button class="bdel" style="background:#ff9500" onclick="archiveLink(' + id + ')">&#128230; Archive</button><button class="bcancel" onclick="clsM()">Cancel</button><button class="bsave" onclick="saveE(' + id + ')">Save</button></div>');
@@ -957,22 +961,22 @@ interface Env {
 
 	var rows = links.map(function(l) {
 	  var tags = l.tags ? l.tags.split(',').map(function(t){
-		return '<span style="display:inline-block;background:#f0f0f5;border-radius:4px;padding:2px 8px;font-size:11px;color:#555;margin:2px 3px 2px 0;">' + t.trim() + '</span>';
+		return '<span style="display:inline-block;background:#f0f0f5;border-radius:4px;padding:2px 8px;font-size:11px;color:#555;margin:2px 3px 2px 0;">' + esc(t.trim()) + '</span>';
 	  }).join('') : '';
 	  var badges = '';
 	  if (l.archived_at) badges += '<span style="display:inline-block;background:#ff9500;color:white;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700;margin-left:6px;">Archive</span>';
 	  if (l.is_private) badges += '<span style="display:inline-block;background:#5856d6;color:white;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700;margin-left:6px;">Private</span>';
-	  var desc = l.description ? '<p style="font-size:13px;color:#555;margin:0 0 10px;line-height:1.5;">' + l.description + '</p>' : '';
-	  var notes = l.notes ? '<div style="font-size:13px;color:#3a3a3c;background:#f9f9fb;border-left:3px solid #0071e3;padding:8px 12px;border-radius:0 6px 6px 0;white-space:pre-wrap;margin-bottom:10px;">' + l.notes + '</div>' : '';
-	  var safeUrl = l.url.split('"').join('&quot;');
+	  var desc = l.description ? '<p style="font-size:13px;color:#555;margin:0 0 10px;line-height:1.5;">' + esc(l.description) + '</p>' : '';
+	  var notes = l.notes ? '<div style="font-size:13px;color:#3a3a3c;background:#f9f9fb;border-left:3px solid #0071e3;padding:8px 12px;border-radius:0 6px 6px 0;white-space:pre-wrap;margin-bottom:10px;">' + esc(l.notes) + '</div>' : '';
+	  var safeUrl = esc(l.url);
 	  var copyBtn = '<a href="' + safeUrl + '" onclick="navigator.clipboard.writeText(this.href);this.style.opacity=0.5;var e=this;setTimeout(function(){e.style.opacity=1;},800);return false;" style="font-size:11px;padding:2px 8px;border:1px solid #d2d2d7;border-radius:4px;background:white;cursor:pointer;color:#6e6e73;margin-left:8px;vertical-align:middle;text-decoration:none;display:inline-block;">Copy URL</a>';
 	  return '<div style="background:white;border-radius:10px;box-shadow:0 1px 6px rgba(0,0,0,0.09);margin-bottom:16px;padding:16px;">'
 		+ '<div style="margin-bottom:8px;">'
-		+ '<a href="' + l.url + '" target="_blank" style="font-size:15px;font-weight:700;color:#1d1d1f;text-decoration:none;line-height:1.4;user-select:text;">' + (l.title || l.url) + '</a>'
+		+ '<a href="' + safeUrl + '" target="_blank" style="font-size:15px;font-weight:700;color:#1d1d1f;text-decoration:none;line-height:1.4;user-select:text;">' + esc(l.title || l.url) + '</a>'
 		+ badges
 		+ '</div>'
 		+ desc
-		+ '<div style="font-size:12px;color:#0071e3;margin-bottom:10px;word-break:break-all;">' + l.url + copyBtn + '</div>'
+		+ '<div style="font-size:12px;color:#0071e3;margin-bottom:10px;word-break:break-all;">' + safeUrl + copyBtn + '</div>'
 		+ notes
 		+ (tags ? '<div style="margin-bottom:10px;">' + tags + '</div>' : '')
 		+ '<div style="font-size:11px;color:#aeaeb2;">' + fmtDate(l.created_at) + '</div>'
@@ -2016,8 +2020,8 @@ function savePasted() {
   <body>
   <div class="card">
 	<h2>&#128204; Save Link</h2>
-	<div class="ptitle">${pageTitle}</div>
-	<div class="purl">${pageUrl}</div>
+		<div class="ptitle">${escapeHtml(pageTitle)}</div>
+		<div class="purl">${escapeHtml(pageUrl)}</div>
 	<label>Tags (comma separated)</label>
 	<input type="text" id="tags" placeholder="e.g. tech, read-later" autofocus>
 	<label>Caption (optional)</label>
@@ -2123,7 +2127,7 @@ function savePasted() {
 		if (!isUnlocked(request)) {
 		  const lockedTags = await getLockedTags(env);
 		  lockedTags.forEach((tag: string) => {
-			conditions.push('(tags != ? AND tags NOT LIKE ? AND tags NOT LIKE ? AND tags NOT LIKE ? AND tags NOT LIKE ? AND tags NOT LIKE ?)');
+			conditions.push('(tags IS NULL OR tags = "" OR (tags != ? AND tags NOT LIKE ? AND tags NOT LIKE ? AND tags NOT LIKE ? AND tags NOT LIKE ? AND tags NOT LIKE ?))');
 			params.push(tag, tag + ',%', '%,' + tag, '%, ' + tag, '%,' + tag + ',%', '%, ' + tag + ',%');
 		  });
 		}

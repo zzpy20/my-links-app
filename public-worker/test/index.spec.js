@@ -1,25 +1,50 @@
-import {
-	env,
-	createExecutionContext,
-	waitOnExecutionContext,
-	SELF,
-} from "cloudflare:test";
-import { describe, it, expect } from "vitest";
+import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
+import { beforeEach, describe, expect, it } from "vitest";
 import worker from "../src";
 
-describe("Hello World worker", () => {
-	it("responds with Hello World! (unit style)", async () => {
-		const request = new Request("http://example.com");
-		// Create an empty context to pass to `worker.fetch()`.
+async function resetDb() {
+	await env.DB.prepare("DROP TABLE IF EXISTS links").run();
+	await env.DB.prepare(`
+		CREATE TABLE links (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			url TEXT,
+			title TEXT,
+			description TEXT,
+			thumbnail TEXT,
+			tags TEXT,
+			notes TEXT,
+			is_private INTEGER DEFAULT 0,
+			archived_at DATETIME,
+			deleted_at DATETIME,
+			created_at DATETIME DEFAULT (datetime('now'))
+		)
+	`).run();
+}
+
+describe("public worker", () => {
+	beforeEach(resetDb);
+
+	it("shows the offline page when public access is disabled", async () => {
 		const ctx = createExecutionContext();
-		const response = await worker.fetch(request, env, ctx);
-		// Wait for all `Promise`s passed to `ctx.waitUntil()` to settle before running test assertions
+		const response = await worker.fetch(new Request("http://example.com"), { ...env, PUBLIC_ENABLED: "false" }, ctx);
 		await waitOnExecutionContext(ctx);
-		expect(await response.text()).toMatchInlineSnapshot(`"Hello World!"`);
+
+		expect(response.status).toBe(503);
+		expect(await response.text()).toContain("Not Available");
 	});
 
-	it("responds with Hello World! (integration style)", async () => {
-		const response = await SELF.fetch("http://example.com");
-		expect(await response.text()).toMatchInlineSnapshot(`"Hello World!"`);
+	it("serializes public link data safely inside the script block", async () => {
+		await env.DB.prepare("INSERT INTO links (url, title, tags) VALUES (?, ?, ?)")
+			.bind("https://example.com", "Example", 'public, </script><img src=x onerror=alert(1)>')
+			.run();
+
+		const ctx = createExecutionContext();
+		const response = await worker.fetch(new Request("http://example.com"), { ...env, PUBLIC_ENABLED: "true" }, ctx);
+		await waitOnExecutionContext(ctx);
+
+		const html = await response.text();
+		expect(response.status).toBe(200);
+		expect(html).toContain("\\u003c/script\\u003e\\u003cimg src=x onerror=alert(1)\\u003e");
+		expect(html).not.toContain("</script><img src=x onerror=alert(1)>");
 	});
 });
