@@ -3,6 +3,8 @@ interface Env {
 	API_TOKEN: string;
 	LOGIN_PASSWORD?: string;
   }
+
+  const THUMBNAIL_BATCH_LIMIT = 10;
   
   function decodeEntities(str: string): string {
 	return str.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
@@ -74,6 +76,25 @@ interface Env {
 	  return decodeEntities(value);
 	}
   }
+
+  function cleanMetadataUrl(url: string): string {
+	try {
+	  const u = new URL(decodeEntities(url));
+	  const amazonAsin = u.hostname.includes('amazon.') && u.pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i);
+	  if (amazonAsin) {
+		return `${u.protocol}//${u.hostname}/dp/${amazonAsin[1]}`;
+	  }
+	  const dropExact = new Set(['fbclid', 'gclid', 'dclid', 'mcid', 'ref', 'ref_', 'ascsubtag']);
+	  for (const key of Array.from(u.searchParams.keys())) {
+		const lower = key.toLowerCase();
+		if (lower.startsWith('utm_') || dropExact.has(lower)) u.searchParams.delete(key);
+	  }
+	  u.hash = '';
+	  return u.href;
+	} catch {
+	  return url;
+	}
+  }
   
   async function processYouTube(url: string): Promise<{ title: string; description: string; thumbnail: string } | null> {
 	const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|m\.youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/);
@@ -136,12 +157,12 @@ interface Env {
 	  const getTag = (pattern: RegExp) => { const m = html.match(pattern); return m ? m[1].trim() : ''; };
 	  const title = findMetaContent(html, 'property', ['og:title']) || findMetaContent(html, 'name', ['twitter:title']) || getTag(/<title[^>]*>([^<]*)<\/title>/i) || '';
 	  const description = findMetaContent(html, 'property', ['og:description']) || findMetaContent(html, 'name', ['description', 'twitter:description']) || '';
-		  const thumbnail =
-			findMetaContent(html, 'property', ['og:image', 'og:image:url', 'og:image:secure_url']) ||
-			findMetaContent(html, 'name', ['twitter:image', 'twitter:image:src']) ||
-			findPreferredImageSrc(html) ||
-			findImageSrc(html) ||
-			findLinkHref(html, ['apple-touch-icon', 'apple-touch-icon-precomposed', 'icon', 'shortcut']);
+	  const thumbnail =
+		findMetaContent(html, 'property', ['og:image', 'og:image:url', 'og:image:secure_url']) ||
+		findMetaContent(html, 'name', ['twitter:image', 'twitter:image:src']) ||
+		findPreferredImageSrc(html) ||
+		findImageSrc(html) ||
+		findLinkHref(html, ['apple-touch-icon', 'apple-touch-icon-precomposed', 'icon', 'shortcut']);
 	  return { title: decodeEntities(title), description: decodeEntities(description), thumbnail: resolveUrl(thumbnail, url) };
 	} catch {
 	  return { title: '', description: '', thumbnail: '' };
@@ -151,7 +172,7 @@ interface Env {
   async function getMeta(url: string) {
 	const yt = await processYouTube(url);
 	if (yt) return yt;
-	return fetchMetadata(url);
+	return fetchMetadata(cleanMetadataUrl(url));
   }
   
   const corsHeaders = {
@@ -1003,16 +1024,38 @@ interface Env {
 		var missing = cl.filter(function(l) { return selectedIds.has(l.id) && !l.thumbnail; });
 		if (!missing.length) { alert('Selected links already have thumbnails.'); return; }
 		if (!confirm('Fetch thumbnails for ' + missing.length + ' selected link(s) missing thumbnails?')) return;
-		fetch('/links/batch-refetch-thumbnails', {
-		  method:'POST',
-		  headers:{'Content-Type':'application/json'},
-		  body:JSON.stringify({ids:missing.map(function(l){return l.id;})})
-		})
-		.then(function(r){return r.json();})
-		.then(function(d) {
-		  alert('Updated ' + (d.updated || 0) + ' thumbnail(s); ' + (d.missing || 0) + ' still missing.');
-		  clearSel(); load(curSearch, curPage);
-		});
+		var ids = missing.map(function(l){return l.id;});
+		var done = 0, updated = 0, stillMissing = 0, failed = 0;
+		var info = document.getElementById('sel-info');
+		function next() {
+		  if (!ids.length) {
+			alert('Checked ' + done + ' link(s). Updated ' + updated + ' thumbnail(s); ' + stillMissing + ' still missing; ' + failed + ' failed.');
+			clearSel(); load(curSearch, curPage);
+			return;
+		  }
+		  var chunk = ids.splice(0, 10);
+		  info.textContent = 'Fetching thumbnails... ' + done + ' / ' + missing.length;
+		  fetch('/links/batch-refetch-thumbnails', {
+			method:'POST',
+			headers:{'Content-Type':'application/json'},
+			body:JSON.stringify({ids:chunk})
+		  })
+		  .then(function(r){return r.json();})
+		  .then(function(d) {
+			done += d.checked || chunk.length;
+			updated += d.updated || 0;
+			stillMissing += d.missing || 0;
+			failed += d.failed || 0;
+			info.textContent = 'Fetching thumbnails... ' + done + ' / ' + missing.length;
+			next();
+		  })
+		  .catch(function() {
+			done += chunk.length;
+			failed += chunk.length;
+			next();
+		  });
+		}
+		next();
 	  }
 	  
 	  function togPrivate(id, val) {
@@ -2270,20 +2313,25 @@ function savePasted() {
 			if (!Array.isArray(body.ids) || body.ids.length === 0) {
 			  return new Response(JSON.stringify({ error: 'ids required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 			}
-			let checked = 0, updated = 0, missing = 0;
-			for (const id of body.ids) {
+			const ids = body.ids.slice(0, THUMBNAIL_BATCH_LIMIT);
+			let checked = 0, updated = 0, missing = 0, skipped = body.ids.length - ids.length, failed = 0;
+			for (const id of ids) {
 			  const row = await env.links_db.prepare('SELECT id, url, thumbnail FROM links WHERE id = ? AND deleted_at IS NULL').bind(id).first() as any;
-			  if (!row || row.thumbnail) continue;
+			  if (!row || row.thumbnail) { skipped++; continue; }
 			  checked++;
-			  const meta = await getMeta(row.url);
-			  if (meta.thumbnail) {
-				await env.links_db.prepare('UPDATE links SET thumbnail = ? WHERE id = ?').bind(meta.thumbnail, row.id).run();
-				updated++;
-			  } else {
-				missing++;
+			  try {
+				const meta = await getMeta(row.url);
+				if (meta.thumbnail) {
+				  await env.links_db.prepare('UPDATE links SET thumbnail = ? WHERE id = ?').bind(meta.thumbnail, row.id).run();
+				  updated++;
+				} else {
+				  missing++;
+				}
+			  } catch {
+				failed++;
 			  }
 			}
-			return new Response(JSON.stringify({ ok: true, checked, updated, missing }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+			return new Response(JSON.stringify({ ok: true, limit: THUMBNAIL_BATCH_LIMIT, checked, updated, missing, skipped, failed }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 		  }
 	  
 		  if (request.method === 'PATCH' && path === '/links/batch-tag') {

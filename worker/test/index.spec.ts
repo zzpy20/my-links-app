@@ -184,21 +184,22 @@ describe("admin worker", () => {
 	});
 
 	it("prefers Amazon landing images over small thumbnails and tracking pixels", async () => {
+		const fetchMock = vi.fn(async () =>
+			new Response(
+				`<!doctype html>
+				<html>
+					<body>
+						<img height="1" width="1" src="//fls-fe.amazon.com.au/1/batch/track">
+						<img alt="" src="https://m.media-amazon.com/images/I/41a90fnL3rL._AC_US40_.jpg">
+						<img id="landingImage" src="https://m.media-amazon.com/images/I/61DdZ9JekLL._AC_SX300_SY300_QL70_ML2_.jpg" data-old-hires="https://m.media-amazon.com/images/I/61DdZ9JekLL._AC_SL1500_.jpg">
+					</body>
+				</html>`,
+				{ headers: { "Content-Type": "text/html" } },
+			)
+		);
 		vi.stubGlobal(
 			"fetch",
-			vi.fn(async () =>
-				new Response(
-					`<!doctype html>
-					<html>
-						<body>
-							<img height="1" width="1" src="//fls-fe.amazon.com.au/1/batch/track">
-							<img alt="" src="https://m.media-amazon.com/images/I/41a90fnL3rL._AC_US40_.jpg">
-							<img id="landingImage" src="https://m.media-amazon.com/images/I/61DdZ9JekLL._AC_SX300_SY300_QL70_ML2_.jpg" data-old-hires="https://m.media-amazon.com/images/I/61DdZ9JekLL._AC_SL1500_.jpg">
-						</body>
-					</html>`,
-					{ headers: { "Content-Type": "text/html" } },
-				),
-			),
+			fetchMock,
 		);
 
 		const ctx = createExecutionContext();
@@ -206,7 +207,7 @@ describe("admin worker", () => {
 			new IncomingRequest("http://example.com/links", {
 				method: "POST",
 				headers: { Authorization: `Bearer ${API_TOKEN}`, "Content-Type": "application/json" },
-				body: JSON.stringify({ url: "https://www.amazon.com.au/dp/B09GFFNX5Y" }),
+				body: JSON.stringify({ url: "https://www.amazon.com.au/dp/B09GFFNX5Y?ref_=pfb_spv01&tag=fbcmapntv-au-22&fbclid=abc&th=1" }),
 			}),
 			{ ...env, API_TOKEN },
 			ctx,
@@ -214,6 +215,7 @@ describe("admin worker", () => {
 		await waitOnExecutionContext(ctx);
 
 		expect(response.status).toBe(200);
+		expect(fetchMock).toHaveBeenCalledWith("https://www.amazon.com.au/dp/B09GFFNX5Y", expect.any(Object));
 		const row = (await env.links_db.prepare("SELECT thumbnail FROM links").first()) as { thumbnail: string };
 		expect(row.thumbnail).toBe("https://m.media-amazon.com/images/I/61DdZ9JekLL._AC_SL1500_.jpg");
 	});
@@ -254,7 +256,7 @@ describe("admin worker", () => {
 		await waitOnExecutionContext(ctx);
 
 		expect(response.status).toBe(200);
-		expect(await response.json()).toEqual({ ok: true, checked: 1, updated: 1, missing: 0 });
+		expect(await response.json()).toEqual({ ok: true, limit: 10, checked: 1, updated: 1, missing: 0, skipped: 1, failed: 0 });
 		const { results } = await env.links_db.prepare("SELECT id, thumbnail FROM links ORDER BY id").all();
 		expect(results).toEqual([
 			{ id: 1, thumbnail: "https://missing.example/new.jpg" },
