@@ -1266,6 +1266,9 @@ header h1 { font-size: 18px; font-weight: 700; color: #1d1d1f; }
 .lurl { font-size: 12px; color: #0071e3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ldate { font-size: 11px; color: #aeaeb2; flex-shrink: 0; }
 .empty { text-align: center; padding: 60px 24px; color: #aeaeb2; font-size: 14px; }
+.sort-bar { display: flex; gap: 4px; padding: 6px 12px 4px; flex-wrap: wrap; }
+.sort-btn { font-size: 11px; padding: 3px 8px; border: 1px solid #d2d2d7; border-radius: 6px; background: white; color: #6e6e73; cursor: pointer; white-space: nowrap; }
+.sort-btn.active { background: #1d1d1f; color: white; border-color: #1d1d1f; }
 </style>
 </head>
 <body>
@@ -1281,6 +1284,12 @@ header h1 { font-size: 18px; font-weight: 700; color: #1d1d1f; }
     <div class="sidebar-head">
       <input type="text" id="search" placeholder="Search collections..." oninput="filterCols()">
     </div>
+    <div class="sort-bar">
+      <button class="sort-btn" id="sort-recent" onclick="setSort('recent')">Recent</button>
+      <button class="sort-btn" id="sort-oldest" onclick="setSort('oldest')">Oldest</button>
+      <button class="sort-btn" id="sort-az" onclick="setSort('az')">A–Z</button>
+      <button class="sort-btn" id="sort-za" onclick="setSort('za')">Z–A</button>
+    </div>
     <div class="col-list" id="col-list"><div class="empty">Loading...</div></div>
   </div>
   <div class="main" id="main">
@@ -1289,6 +1298,22 @@ header h1 { font-size: 18px; font-weight: 700; color: #1d1d1f; }
 </div>
 <scr` + `ipt>
 var allCols = [], curTag = null, curLinks = [], isSessionUnlocked = false;
+var curSort = 'recent';
+
+function setSort(s) {
+  curSort = s;
+  ['recent','oldest','az','za'].forEach(function(k){ document.getElementById('sort-' + k).classList.toggle('active', k === s); });
+  filterCols();
+}
+
+function sortedCols(cols) {
+  var c = cols.slice();
+  if (curSort === 'az') c.sort(function(a,b){ return (a.name||a.tag).localeCompare(b.name||b.tag); });
+  else if (curSort === 'za') c.sort(function(a,b){ return (b.name||b.tag).localeCompare(a.name||a.tag); });
+  else if (curSort === 'oldest') c.sort(function(a,b){ return a.earliest < b.earliest ? -1 : 1; });
+  else c.sort(function(a,b){ return b.latest > a.latest ? 1 : -1; });
+  return c;
+}
 
 function updateSessionButtons() {
   var hasLocked = allCols.some(function(c){ return c.locked; });
@@ -1300,7 +1325,7 @@ fetch('/collections-data').then(function(r){ return r.json(); }).then(function(d
   allCols = d.collections || [];
   isSessionUnlocked = d.unlocked || false;
   document.getElementById('hcnt').textContent = allCols.length;
-  renderSidebar(allCols);
+  setSort('recent');
   updateSessionButtons();
 });
 
@@ -1310,14 +1335,14 @@ function unlockSession() {
   fetch('/unlock', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:pw})})
   .then(function(r){ return r.json(); })
   .then(function(d){
-    if (d.ok) { isSessionUnlocked = true; updateSessionButtons(); renderSidebar(allCols); if (curTag) loadCol(curTag); }
+    if (d.ok) { isSessionUnlocked = true; updateSessionButtons(); renderSidebar(sortedCols(allCols)); if (curTag) loadCol(curTag); }
     else { alert('Wrong password.'); }
   });
 }
 
 function lockSession() {
   fetch('/lock', {method:'POST'}).then(function(){
-    isSessionUnlocked = false; updateSessionButtons(); renderSidebar(allCols);
+    isSessionUnlocked = false; updateSessionButtons(); renderSidebar(sortedCols(allCols));
     if (curTag) { var col = allCols.find(function(c){ return c.tag === curTag; }); if (col && col.locked) loadCol(curTag); }
   });
 }
@@ -1329,14 +1354,15 @@ function setCollectionLock(tag, lock) {
     var col = allCols.find(function(c){ return c.tag === tag; });
     if (col) col.locked = lock;
     updateSessionButtons();
-    renderSidebar(allCols);
+    renderSidebar(sortedCols(allCols));
     loadCol(tag);
   });
 }
 
 function filterCols() {
   var q = document.getElementById('search').value.toLowerCase();
-  renderSidebar(q ? allCols.filter(function(c){ return (c.name || c.tag).toLowerCase().indexOf(q) >= 0; }) : allCols);
+  var filtered = q ? allCols.filter(function(c){ return (c.name || c.tag).toLowerCase().indexOf(q) >= 0; }) : allCols;
+  renderSidebar(sortedCols(filtered));
 }
 
 function esc(s) {
@@ -1372,7 +1398,7 @@ function renderSidebar(cols) {
 
 function loadCol(tag) {
   curTag = tag;
-  renderSidebar(allCols);
+  renderSidebar(sortedCols(allCols));
   var col = allCols.find(function(c){ return c.tag === tag; });
   var main = document.getElementById('main');
 
@@ -1439,7 +1465,7 @@ function saveMeta() {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({name: name, description: desc})
   }).then(function(r){ return r.json(); }).then(function(d){
-    if (d.ok) { col.name = name; col.description = desc; renderSidebar(allCols); }
+    if (d.ok) { col.name = name; col.description = desc; renderSidebar(sortedCols(allCols)); }
   });
 }
 
@@ -1674,20 +1700,20 @@ button:hover { background: #0077ed; }
 		await env.links_db.prepare('CREATE TABLE IF NOT EXISTS tag_metadata (id INTEGER PRIMARY KEY AUTOINCREMENT, tag TEXT NOT NULL UNIQUE, name TEXT, description TEXT, locked INTEGER DEFAULT 0, created_at DATETIME DEFAULT (datetime(\'now\')))').run();
 		try { await env.links_db.prepare('ALTER TABLE tag_metadata ADD COLUMN locked INTEGER DEFAULT 0').run(); } catch {}
 		const { results: rows } = await env.links_db.prepare('SELECT tags, created_at FROM links WHERE deleted_at IS NULL AND tags IS NOT NULL AND tags != \'\'').all();
-		const tagMap = new Map<string, { count: number; latest: string }>();
+		const tagMap = new Map<string, { count: number; latest: string; earliest: string }>();
 		for (const row of rows as any[]) {
 		  const tags = row.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
 		  for (const tag of tags) {
 			const ex = tagMap.get(tag);
-			if (ex) { ex.count++; if (row.created_at > ex.latest) ex.latest = row.created_at; }
-			else tagMap.set(tag, { count: 1, latest: row.created_at });
+			if (ex) { ex.count++; if (row.created_at > ex.latest) ex.latest = row.created_at; if (row.created_at < ex.earliest) ex.earliest = row.created_at; }
+			else tagMap.set(tag, { count: 1, latest: row.created_at, earliest: row.created_at });
 		  }
 		}
 		const { results: meta } = await env.links_db.prepare('SELECT * FROM tag_metadata').all();
 		const metaMap: Record<string, any> = {};
 		(meta as any[]).forEach((m: any) => { metaMap[m.tag] = m; });
 		const collections = Array.from(tagMap.entries())
-		  .map(([tag, d]) => ({ tag, count: d.count, latest: d.latest, name: metaMap[tag]?.name || null, description: metaMap[tag]?.description || null, locked: metaMap[tag]?.locked ? true : false }))
+		  .map(([tag, d]) => ({ tag, count: d.count, latest: d.latest, earliest: d.earliest, name: metaMap[tag]?.name || null, description: metaMap[tag]?.description || null, locked: metaMap[tag]?.locked ? true : false }))
 		  .sort((a, b) => (b.latest > a.latest ? 1 : -1));
 		return new Response(JSON.stringify({ collections, unlocked: isUnlocked(request) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 	  }
