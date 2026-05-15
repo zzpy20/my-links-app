@@ -144,4 +144,42 @@ describe("admin worker", () => {
 			thumbnail: "https://site.example/images/card.jpg",
 		});
 	});
+
+	it("falls back to the first regular page image when preview metadata is missing", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () =>
+				new Response(
+					`<!doctype html>
+					<html>
+						<head>
+							<title>Product page</title>
+							<link rel="icon" href="/favicon.ico">
+						</head>
+						<body>
+							<img src="/assets/logo.svg">
+							<img src="/products/photo.jpg">
+						</body>
+					</html>`,
+					{ headers: { "Content-Type": "text/html" } },
+				),
+			),
+		);
+
+		const ctx = createExecutionContext();
+		const response = await worker.fetch(
+			new IncomingRequest("http://example.com/links", {
+				method: "POST",
+				headers: { Authorization: `Bearer ${API_TOKEN}`, "Content-Type": "application/json" },
+				body: JSON.stringify({ url: "https://shop.example/items/one" }),
+			}),
+			{ ...env, API_TOKEN },
+			ctx,
+		);
+		await waitOnExecutionContext(ctx);
+
+		expect(response.status).toBe(200);
+		const row = (await env.links_db.prepare("SELECT thumbnail FROM links").first()) as { thumbnail: string };
+		expect(row.thumbnail).toBe("https://shop.example/products/photo.jpg");
+	});
 });

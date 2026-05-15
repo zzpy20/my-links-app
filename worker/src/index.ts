@@ -37,6 +37,20 @@ interface Env {
 	return '';
   }
 
+  function findImageSrc(html: string): string {
+	const tags = html.match(/<img\b[^>]*>/gi) || [];
+	for (const tag of tags) {
+	  const src = getAttr(tag, 'src') || getAttr(tag, 'data-src') || getAttr(tag, 'data-original');
+	  if (!src) continue;
+	  const lower = src.toLowerCase();
+	  if (lower.startsWith('data:')) continue;
+	  if (/\.(svg|gif)(\?|#|$)/i.test(lower)) continue;
+	  if (/(logo|icon|sprite|spinner|loading|placeholder|avatar|badge)/i.test(lower)) continue;
+	  return src;
+	}
+	return '';
+  }
+
   function resolveUrl(value: string, baseUrl: string): string {
 	if (!value) return '';
 	try {
@@ -107,10 +121,11 @@ interface Env {
 	  const getTag = (pattern: RegExp) => { const m = html.match(pattern); return m ? m[1].trim() : ''; };
 	  const title = findMetaContent(html, 'property', ['og:title']) || findMetaContent(html, 'name', ['twitter:title']) || getTag(/<title[^>]*>([^<]*)<\/title>/i) || '';
 	  const description = findMetaContent(html, 'property', ['og:description']) || findMetaContent(html, 'name', ['description', 'twitter:description']) || '';
-	  const thumbnail =
-		findMetaContent(html, 'property', ['og:image', 'og:image:url', 'og:image:secure_url']) ||
-		findMetaContent(html, 'name', ['twitter:image', 'twitter:image:src']) ||
-		findLinkHref(html, ['apple-touch-icon', 'apple-touch-icon-precomposed', 'icon', 'shortcut']);
+		  const thumbnail =
+			findMetaContent(html, 'property', ['og:image', 'og:image:url', 'og:image:secure_url']) ||
+			findMetaContent(html, 'name', ['twitter:image', 'twitter:image:src']) ||
+			findImageSrc(html) ||
+			findLinkHref(html, ['apple-touch-icon', 'apple-touch-icon-precomposed', 'icon', 'shortcut']);
 	  return { title: decodeEntities(title), description: decodeEntities(description), thumbnail: resolveUrl(thumbnail, url) };
 	} catch {
 	  return { title: '', description: '', thumbnail: '' };
