@@ -182,4 +182,48 @@ describe("admin worker", () => {
 		const row = (await env.links_db.prepare("SELECT thumbnail FROM links").first()) as { thumbnail: string };
 		expect(row.thumbnail).toBe("https://shop.example/products/photo.jpg");
 	});
+
+	it("bulk refetches thumbnails only for selected links missing thumbnails", async () => {
+		await env.links_db
+			.prepare("INSERT INTO links (id, url, title, thumbnail) VALUES (?, ?, ?, ?), (?, ?, ?, ?)")
+			.bind(
+				1,
+				"https://missing.example/one",
+				"Missing",
+				"",
+				2,
+				"https://existing.example/two",
+				"Existing",
+				"https://existing.example/current.jpg",
+			)
+			.run();
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () =>
+				new Response('<html><head><meta property="og:image" content="/new.jpg"></head></html>', {
+					headers: { "Content-Type": "text/html" },
+				}),
+			),
+		);
+
+		const ctx = createExecutionContext();
+		const response = await worker.fetch(
+			new IncomingRequest("http://example.com/links/batch-refetch-thumbnails", {
+				method: "POST",
+				headers: { Authorization: `Bearer ${API_TOKEN}`, "Content-Type": "application/json" },
+				body: JSON.stringify({ ids: [1, 2] }),
+			}),
+			{ ...env, API_TOKEN },
+			ctx,
+		);
+		await waitOnExecutionContext(ctx);
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({ ok: true, checked: 1, updated: 1, missing: 0 });
+		const { results } = await env.links_db.prepare("SELECT id, thumbnail FROM links ORDER BY id").all();
+		expect(results).toEqual([
+			{ id: 1, thumbnail: "https://missing.example/new.jpg" },
+			{ id: 2, thumbnail: "https://existing.example/current.jpg" },
+		]);
+	});
 });

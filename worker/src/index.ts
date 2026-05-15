@@ -401,12 +401,13 @@ interface Env {
 		</div>
 	  </div>
 	</div>
-	<button class="sel-archive" id="btn-sel-archive" onclick="archiveSelected()">&#128230; Archive Selected</button>
-	<button class="sel-restore" id="btn-sel-restore" onclick="restoreSelected()" style="display:none">&#8617; Restore Selected</button>
-	<button class="sel-private" id="btn-private" onclick="togglePrivateSelected()">&#128274; Make Private</button>
-	<button class="sel-export" onclick="exportLinks()">&#8681; Export</button>
-	<button class="sel-delete" onclick="deleteSelected()">&#128465; Delete Selected</button>
-	<button class="sel-clear" onclick="clearSel()">&#x2715; Cancel</button>
+		<button class="sel-archive" id="btn-sel-archive" onclick="archiveSelected()">&#128230; Archive Selected</button>
+		<button class="sel-restore" id="btn-sel-restore" onclick="restoreSelected()" style="display:none">&#8617; Restore Selected</button>
+		<button class="sel-private" id="btn-private" onclick="togglePrivateSelected()">&#128274; Make Private</button>
+		<button class="sel-export" onclick="refetchMissingThumbnails()">&#8635; Fetch Thumbnails</button>
+		<button class="sel-export" onclick="exportLinks()">&#8681; Export</button>
+		<button class="sel-delete" onclick="deleteSelected()">&#128465; Delete Selected</button>
+		<button class="sel-clear" onclick="clearSel()">&#x2715; Cancel</button>
   </div>
   <div id="con"></div>
   <div id="pager"></div>
@@ -974,15 +975,32 @@ interface Env {
 	.then(function() { clearSel(); load(curSearch, curPage); loadTags(); });
   }
   
-  function restoreSelected() {
-	if (selectedIds.size === 0) return;
-	if (!confirm('Restore ' + selectedIds.size + ' selected link(s)?')) return;
-	Promise.all(Array.from(selectedIds).map(function(id){return fetch('/links/'+id+'/unarchive',{method:'POST'});}))
-	.then(function() { clearSel(); load(curSearch, curPage); });
-  }
-  
-  function togPrivate(id, val) {
-	fetch('/links/' + id + '/private', {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_private:val})})
+	  function restoreSelected() {
+		if (selectedIds.size === 0) return;
+		if (!confirm('Restore ' + selectedIds.size + ' selected link(s)?')) return;
+		Promise.all(Array.from(selectedIds).map(function(id){return fetch('/links/'+id+'/unarchive',{method:'POST'});}))
+		.then(function() { clearSel(); load(curSearch, curPage); });
+	  }
+
+	  function refetchMissingThumbnails() {
+		if (selectedIds.size === 0) return;
+		var missing = cl.filter(function(l) { return selectedIds.has(l.id) && !l.thumbnail; });
+		if (!missing.length) { alert('Selected links already have thumbnails.'); return; }
+		if (!confirm('Fetch thumbnails for ' + missing.length + ' selected link(s) missing thumbnails?')) return;
+		fetch('/links/batch-refetch-thumbnails', {
+		  method:'POST',
+		  headers:{'Content-Type':'application/json'},
+		  body:JSON.stringify({ids:missing.map(function(l){return l.id;})})
+		})
+		.then(function(r){return r.json();})
+		.then(function(d) {
+		  alert('Updated ' + (d.updated || 0) + ' thumbnail(s); ' + (d.missing || 0) + ' still missing.');
+		  clearSel(); load(curSearch, curPage);
+		});
+	  }
+	  
+	  function togPrivate(id, val) {
+		fetch('/links/' + id + '/private', {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_private:val})})
 	.then(function() { cl.forEach(function(x){if(x.id===id)x.is_private=val;}); render(cl); });
   }
   
@@ -2223,16 +2241,37 @@ function savePasted() {
 		return new Response(JSON.stringify({ ok: true, links_updated: linkStmts.length, meta_updated: metaStmts.length }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 	  }
 
-	  if (request.method === 'POST' && path === '/links/batch-archive') {
-		const body = await request.json() as { ids: number[] };
-		for (const id of body.ids) {
-		  await env.links_db.prepare("UPDATE links SET archived_at = datetime('now') WHERE id = ?").bind(id).run();
-		}
-		return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
-	  }
-  
-	  if (request.method === 'PATCH' && path === '/links/batch-tag') {
-		const body = await request.json() as { ids: number[]; tags: string; mode: string };
+		  if (request.method === 'POST' && path === '/links/batch-archive') {
+			const body = await request.json() as { ids: number[] };
+			for (const id of body.ids) {
+			  await env.links_db.prepare("UPDATE links SET archived_at = datetime('now') WHERE id = ?").bind(id).run();
+			}
+			return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
+		  }
+
+		  if (request.method === 'POST' && path === '/links/batch-refetch-thumbnails') {
+			const body = await request.json() as { ids: number[] };
+			if (!Array.isArray(body.ids) || body.ids.length === 0) {
+			  return new Response(JSON.stringify({ error: 'ids required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+			}
+			let checked = 0, updated = 0, missing = 0;
+			for (const id of body.ids) {
+			  const row = await env.links_db.prepare('SELECT id, url, thumbnail FROM links WHERE id = ? AND deleted_at IS NULL').bind(id).first() as any;
+			  if (!row || row.thumbnail) continue;
+			  checked++;
+			  const meta = await getMeta(row.url);
+			  if (meta.thumbnail) {
+				await env.links_db.prepare('UPDATE links SET thumbnail = ? WHERE id = ?').bind(meta.thumbnail, row.id).run();
+				updated++;
+			  } else {
+				missing++;
+			  }
+			}
+			return new Response(JSON.stringify({ ok: true, checked, updated, missing }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+		  }
+	  
+		  if (request.method === 'PATCH' && path === '/links/batch-tag') {
+			const body = await request.json() as { ids: number[]; tags: string; mode: string };
 		for (const id of body.ids) {
 		  const row = await env.links_db.prepare('SELECT tags FROM links WHERE id = ?').bind(id).first() as any;
 		  if (!row) continue;
