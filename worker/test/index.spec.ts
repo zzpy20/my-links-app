@@ -1,5 +1,5 @@
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
 
 const IncomingRequest = Request<unknown, IncomingRequestCfProperties>;
@@ -48,6 +48,9 @@ function authedRequest(url: string) {
 
 describe("admin worker", () => {
 	beforeEach(resetDb);
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
 
 	it("renders the login page for unauthenticated HTML requests", async () => {
 		const ctx = createExecutionContext();
@@ -97,5 +100,48 @@ describe("admin worker", () => {
 
 		const data = (await response.json()) as { results: Array<{ title: string }> };
 		expect(data.results.map((link) => link.title).sort()).toEqual(["Open", "Untagged"]);
+	});
+
+	it("stores a resolved thumbnail when metadata uses reordered attributes and relative URLs", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () =>
+				new Response(
+					`<!doctype html>
+					<html>
+						<head>
+							<meta content="Metadata title" property="og:title">
+							<meta content="Metadata description" name="description">
+							<meta content="/images/card.jpg" property="og:image">
+						</head>
+					</html>`,
+					{ headers: { "Content-Type": "text/html" } },
+				),
+			),
+		);
+
+		const ctx = createExecutionContext();
+		const response = await worker.fetch(
+			new IncomingRequest("http://example.com/links", {
+				method: "POST",
+				headers: { Authorization: `Bearer ${API_TOKEN}`, "Content-Type": "application/json" },
+				body: JSON.stringify({ url: "https://site.example/articles/one" }),
+			}),
+			{ ...env, API_TOKEN },
+			ctx,
+		);
+		await waitOnExecutionContext(ctx);
+
+		expect(response.status).toBe(200);
+		const row = (await env.links_db.prepare("SELECT title, description, thumbnail FROM links").first()) as {
+			title: string;
+			description: string;
+			thumbnail: string;
+		};
+		expect(row).toEqual({
+			title: "Metadata title",
+			description: "Metadata description",
+			thumbnail: "https://site.example/images/card.jpg",
+		});
 	});
 });

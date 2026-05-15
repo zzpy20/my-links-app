@@ -11,6 +11,40 @@ interface Env {
   function escapeHtml(str: string): string {
 	return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
+
+  function getAttr(tag: string, name: string): string {
+	const match = tag.match(new RegExp(`\\s${name}\\s*=\\s*["']([^"']*)["']`, 'i'));
+	return match ? match[1].trim() : '';
+  }
+
+  function findMetaContent(html: string, attrName: string, values: string[]): string {
+	const tags = html.match(/<meta\b[^>]*>/gi) || [];
+	const expected = values.map((v) => v.toLowerCase());
+	for (const tag of tags) {
+	  const attrValue = getAttr(tag, attrName).toLowerCase();
+	  if (expected.includes(attrValue)) return getAttr(tag, 'content');
+	}
+	return '';
+  }
+
+  function findLinkHref(html: string, relValues: string[]): string {
+	const tags = html.match(/<link\b[^>]*>/gi) || [];
+	const expected = relValues.map((v) => v.toLowerCase());
+	for (const tag of tags) {
+	  const rels = getAttr(tag, 'rel').toLowerCase().split(/\s+/).filter(Boolean);
+	  if (expected.some((rel) => rels.includes(rel))) return getAttr(tag, 'href');
+	}
+	return '';
+  }
+
+  function resolveUrl(value: string, baseUrl: string): string {
+	if (!value) return '';
+	try {
+	  return new URL(decodeEntities(value), baseUrl).href;
+	} catch {
+	  return decodeEntities(value);
+	}
+  }
   
   async function processYouTube(url: string): Promise<{ title: string; description: string; thumbnail: string } | null> {
 	const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|m\.youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/);
@@ -71,10 +105,13 @@ interface Env {
 	  });
 	  const html = await res.text();
 	  const getTag = (pattern: RegExp) => { const m = html.match(pattern); return m ? m[1].trim() : ''; };
-	  const title = getTag(/<meta property="og:title" content="([^"]*)"/) || getTag(/<title>([^<]*)<\/title>/) || '';
-	  const description = getTag(/<meta property="og:description" content="([^"]*)"/) || getTag(/<meta name="description" content="([^"]*)"/) || '';
-	  const thumbnail = getTag(/<meta property="og:image" content="([^"]*)"/) || getTag(/<meta name="twitter:image" content="([^"]*)"/) || '';
-	  return { title: decodeEntities(title), description: decodeEntities(description), thumbnail };
+	  const title = findMetaContent(html, 'property', ['og:title']) || findMetaContent(html, 'name', ['twitter:title']) || getTag(/<title[^>]*>([^<]*)<\/title>/i) || '';
+	  const description = findMetaContent(html, 'property', ['og:description']) || findMetaContent(html, 'name', ['description', 'twitter:description']) || '';
+	  const thumbnail =
+		findMetaContent(html, 'property', ['og:image', 'og:image:url', 'og:image:secure_url']) ||
+		findMetaContent(html, 'name', ['twitter:image', 'twitter:image:src']) ||
+		findLinkHref(html, ['apple-touch-icon', 'apple-touch-icon-precomposed', 'icon', 'shortcut']);
+	  return { title: decodeEntities(title), description: decodeEntities(description), thumbnail: resolveUrl(thumbnail, url) };
 	} catch {
 	  return { title: '', description: '', thumbnail: '' };
 	}
