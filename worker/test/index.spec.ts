@@ -61,6 +61,17 @@ describe("admin worker", () => {
 		expect(response.headers.get("Location")).toBe("/login");
 	});
 
+	it("serves the favicon without authentication", async () => {
+		const ctx = createExecutionContext();
+		const response = await worker.fetch(new IncomingRequest("http://example.com/favicon.svg"), env, ctx);
+		await waitOnExecutionContext(ctx);
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get("Content-Type")).toContain("image/svg+xml");
+		const body = new TextDecoder().decode(await response.arrayBuffer());
+		expect(body).toContain("<svg");
+	});
+
 	it("escapes bookmarklet title and URL values on the add page", async () => {
 		const ctx = createExecutionContext();
 		const response = await worker.fetch(

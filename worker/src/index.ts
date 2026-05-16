@@ -5,6 +5,12 @@ interface Env {
   }
 
   const THUMBNAIL_BATCH_LIMIT = 10;
+  const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<rect width="64" height="64" rx="14" fill="#fce7f3"/>
+<path d="M25.7 36.8 20.4 42a9 9 0 0 1-12.7-12.7l7.1-7.1a9 9 0 0 1 12.7 0" fill="none" stroke="#1d1d1f" stroke-width="5" stroke-linecap="round"/>
+<path d="M38.3 27.2 43.6 22a9 9 0 0 1 12.7 12.7l-7.1 7.1a9 9 0 0 1-12.7 0" fill="none" stroke="#1d1d1f" stroke-width="5" stroke-linecap="round"/>
+<path d="m24 40 16-16" fill="none" stroke="#0071e3" stroke-width="5" stroke-linecap="round"/>
+</svg>`;
   
   function decodeEntities(str: string): string {
 	return str.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
@@ -188,6 +194,8 @@ interface Env {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My Links</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="shortcut icon" href="/favicon.ico">
   <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f7; color: #1d1d1f; }
@@ -1347,6 +1355,8 @@ interface Env {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Collections - My Links</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="shortcut icon" href="/favicon.ico">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f7; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
@@ -1660,10 +1670,12 @@ function copyUrls(btn) {
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>My Links — Login</title>
-<style>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>My Links — Login</title>
+	<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+	<link rel="shortcut icon" href="/favicon.ico">
+	<style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f7; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
 .card { background: white; border-radius: 18px; padding: 40px 36px; width: 340px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
@@ -1697,11 +1709,20 @@ button:hover { background: #0077ed; }
 	  const url = new URL(request.url);
 	  const path = url.pathname;
 
-	  if (request.method === 'OPTIONS') {
-		return new Response(null, { headers: corsHeaders });
-	  }
+		  if (request.method === 'OPTIONS') {
+			return new Response(null, { headers: corsHeaders });
+		  }
 
-	  // Login route (no auth required)
+		  if (request.method === 'GET' && (path === '/favicon.svg' || path === '/favicon.ico')) {
+			return new Response(faviconSvg, {
+			  headers: {
+				'Content-Type': 'image/svg+xml; charset=utf-8',
+				'Cache-Control': 'public, max-age=86400',
+			  },
+			});
+		  }
+	
+		  // Login route (no auth required)
 	  if (path === '/logout') {
 		return new Response(null, {
 		  status: 302,
@@ -1899,10 +1920,12 @@ button:hover { background: #0077ed; }
 	const importHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Import Bookmarks</title>
-<style>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Import Bookmarks</title>
+	<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+	<link rel="shortcut icon" href="/favicon.ico">
+	<style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f7; padding: 24px 16px; }
 .wrap { max-width: 640px; margin: 0 auto; }
@@ -2125,10 +2148,12 @@ function savePasted() {
 		const addHtml = `<!DOCTYPE html>
   <html lang="en">
   <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Save Link</title>
-  <style>
+	  <meta charset="UTF-8">
+	  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	  <title>Save Link</title>
+	  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+	  <link rel="shortcut icon" href="/favicon.ico">
+	  <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f7; padding: 20px; }
   .card { background: white; border-radius: 14px; padding: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
