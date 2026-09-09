@@ -1682,13 +1682,18 @@ function copyUrls(btn) {
   //
   // cacheKeySuffix lets callers vary the cache by session state that
   // affects the response (isUnlocked()) without a full Vary mechanism --
-  // /tags and /collections-data both filter differently based on the
-  // `unlocked` cookie, and caching a response computed for one state could
-  // otherwise leak into a request in the other state.
+  // /tags, /collections-data, and /links all filter differently based on
+  // the `unlocked` cookie, and caching a response computed for one state
+  // could otherwise leak into a request in the other state. Added as a
+  // real query param (not raw string concatenation) so this stays correct
+  // for /links, whose URL already has its own query string (search/tags/
+  // page/perPage/view) -- naive concatenation would produce a second `?`.
   const EDGE_CACHE_TTL_SECONDS = 20;
   async function withEdgeCache(request: Request, ctx: ExecutionContext, cacheKeySuffix: string, compute: () => Promise<Response>): Promise<Response> {
 	const cache = caches.default;
-	const cacheKey = new Request(request.url + cacheKeySuffix, { method: 'GET' });
+	const cacheUrl = new URL(request.url);
+	if (cacheKeySuffix) cacheUrl.searchParams.set('_edgeCacheKey', cacheKeySuffix);
+	const cacheKey = new Request(cacheUrl.toString(), { method: 'GET' });
 	const hit = await cache.match(cacheKey);
 	if (hit) {
 	  const clientRes = new Response(hit.body, hit);
@@ -1827,7 +1832,7 @@ button:hover { background: #0077ed; }
 	  }
 
 	  if (request.method === 'GET' && path === '/tags') {
-		return withEdgeCache(request, ctx, isUnlocked(request) ? '?_u=1' : '?_u=0', async () => {
+		return withEdgeCache(request, ctx, isUnlocked(request) ? 'u1' : 'u0', async () => {
 		  const { results } = await env.links_db.prepare(
 			'SELECT tags FROM links WHERE tags IS NOT NULL AND tags != "" AND deleted_at IS NULL AND archived_at IS NULL AND is_private = 0'
 		  ).all();
@@ -1903,7 +1908,7 @@ button:hover { background: #0077ed; }
 		// request. It's also written to unconditionally elsewhere
 		// (rename-tag, delete-tag, /collection-meta) with no such guard, so
 		// those already assumed it exists.
-		return withEdgeCache(request, ctx, isUnlocked(request) ? '?_u=1' : '?_u=0', async () => {
+		return withEdgeCache(request, ctx, isUnlocked(request) ? 'u1' : 'u0', async () => {
 		  const { results: rows } = await env.links_db.prepare('SELECT tags, created_at FROM links WHERE deleted_at IS NULL AND tags IS NOT NULL AND tags != \'\'').all();
 		  const tagMap = new Map<string, { count: number; latest: string; earliest: string }>();
 		  for (const row of rows as any[]) {
@@ -2343,10 +2348,20 @@ function savePasted() {
 		}
   
 		const where = ' WHERE ' + conditions.join(' AND ');
-		const countRow = await env.links_db.prepare('SELECT COUNT(*) as total FROM links' + where).bind(...params).first() as any;
-		const total = countRow ? countRow.total : 0;
-		const { results } = await env.links_db.prepare('SELECT * FROM links' + where + ' ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(...params, pp, (page-1)*pp).all();
-		return new Response(JSON.stringify({ results, total, page, perPage: pp }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+		// The single most frequently-called read in the app (every page
+		// load, search keystroke, tab/page switch) -- was the one of the
+		// four page-load-frequency full-scan endpoints that didn't get the
+		// edge-cache pattern applied to /tags, /tags-admin, and
+		// /collections-data. Cache key includes the full query string
+		// (search/tags/page/perPage/view all vary the result) plus the same
+		// isUnlocked() suffix those three use, since lockedTags filtering
+		// below also depends on it.
+		return withEdgeCache(request, ctx, isUnlocked(request) ? 'u1' : 'u0', async () => {
+		  const countRow = await env.links_db.prepare('SELECT COUNT(*) as total FROM links' + where).bind(...params).first() as any;
+		  const total = countRow ? countRow.total : 0;
+		  const { results } = await env.links_db.prepare('SELECT * FROM links' + where + ' ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(...params, pp, (page-1)*pp).all();
+		  return new Response(JSON.stringify({ results, total, page, perPage: pp }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+		});
 	  }
   
 	  if (request.method === 'GET' && path === '/trash-count') {
