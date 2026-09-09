@@ -294,30 +294,64 @@ function safeJson(value) {
   </html>`;
   }
   
-  export default {
-	async fetch(request, env) {
-	  if (env.PUBLIC_ENABLED !== 'true') {
-		return new Response(getOfflineHTML(), {
-		  status: 503,
-		  headers: { 'Content-Type': 'text/html; charset=utf-8' }
-		});
-	  }
-  
-	  try {
-		const result = await env.DB.prepare(
-		  'SELECT * FROM links WHERE deleted_at IS NULL AND archived_at IS NULL AND is_private = 0' +
-		  ' AND (tags = ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ?)' +
-		  ' ORDER BY created_at DESC LIMIT 500'
-		).bind('public', 'public,%', '%, public', '%,public', '%,public,%', '%, public,%').all();
+  // Cached at Cloudflare's edge for a short window -- this page previously
+// ran the DB query unconditionally on *every* request to this origin, any
+// path or method, unauthenticated, uncached (favicon/robots.txt/scanner
+// probes all included). It shares links-db, and links-db shares an
+// account-wide D1 daily row-read quota with every other Cloudflare project
+// on the account -- see my-links-app's own outage on 2026-09-06/07, caused
+// by exactly this pattern (public + unauthenticated + uncached) in a
+// different project (`status`). This data only changes when a link is
+// added/edited, so a short cache is invisible in practice.
+const EDGE_CACHE_TTL_SECONDS = 60;
 
-		let links = result.results || [];
-
-		const html = getHTML(links);
-		return new Response(html, {
-		  headers: { 'Content-Type': 'text/html; charset=utf-8' }
-		});
-	  } catch (e) {
-		return new Response('Error: ' + e.message, { status: 500 });
-	  }
+export default {
+  async fetch(request, env, ctx) {
+	const url = new URL(request.url);
+	if (request.method !== 'GET' || url.pathname !== '/') {
+	  return new Response('Not found', { status: 404 });
 	}
-  };
+
+	if (env.PUBLIC_ENABLED !== 'true') {
+	  return new Response(getOfflineHTML(), {
+		status: 503,
+		headers: { 'Content-Type': 'text/html; charset=utf-8' }
+	  });
+	}
+
+	const cache = caches.default;
+	const cacheKey = new Request(url.toString(), { method: 'GET' });
+	const hit = await cache.match(cacheKey);
+	if (hit) {
+	  const clientRes = new Response(hit.body, hit);
+	  clientRes.headers.set('cache-control', 'no-store');
+	  clientRes.headers.set('x-edge-cache', 'HIT');
+	  return clientRes;
+	}
+
+	try {
+	  const result = await env.DB.prepare(
+		'SELECT * FROM links WHERE deleted_at IS NULL AND archived_at IS NULL AND is_private = 0' +
+		' AND (tags = ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ?)' +
+		' ORDER BY created_at DESC LIMIT 500'
+	  ).bind('public', 'public,%', '%, public', '%,public', '%,public,%', '%, public,%').all();
+
+	  let links = result.results || [];
+
+	  const html = getHTML(links);
+	  const res = new Response(html, {
+		headers: { 'Content-Type': 'text/html; charset=utf-8' }
+	  });
+
+	  const cacheCopy = res.clone();
+	  cacheCopy.headers.set('cache-control', `public, max-age=${EDGE_CACHE_TTL_SECONDS}`);
+	  ctx.waitUntil(cache.put(cacheKey, cacheCopy));
+
+	  res.headers.set('cache-control', 'no-store');
+	  res.headers.set('x-edge-cache', 'MISS');
+	  return res;
+	} catch (e) {
+	  return new Response('Error: ' + e.message, { status: 500 });
+	}
+  }
+};

@@ -1666,6 +1666,47 @@ function copyUrls(btn) {
 	} catch { return []; }
   }
 
+  // Short edge-cache (Cloudflare's own Cache API, separate from and much
+  // shorter than any browser cache) for read endpoints that scan the whole
+  // `links` table with no LIMIT -- /tags, /tags-admin, /collections-data.
+  // These are cheap today (~1,000 rows), but this is the same
+  // page-load-frequency full-scan shape that caused D1's account-wide daily
+  // row-read quota to be exhausted five times in the `status` project this
+  // week (see that repo's docs/incidents/2026-09-06-d1-quota-exhaustion.md)
+  // -- a shared quota this app's own D1 database (links-db) draws from too.
+  // Bounding request frequency here is cheap insurance against the same
+  // pattern recurring as `links` grows. The client always gets
+  // `Cache-Control: no-store`; only Cloudflare's edge caches, and only for
+  // 20 seconds -- shorter than a human is likely to notice after adding or
+  // editing a tag.
+  //
+  // cacheKeySuffix lets callers vary the cache by session state that
+  // affects the response (isUnlocked()) without a full Vary mechanism --
+  // /tags and /collections-data both filter differently based on the
+  // `unlocked` cookie, and caching a response computed for one state could
+  // otherwise leak into a request in the other state.
+  const EDGE_CACHE_TTL_SECONDS = 20;
+  async function withEdgeCache(request: Request, ctx: ExecutionContext, cacheKeySuffix: string, compute: () => Promise<Response>): Promise<Response> {
+	const cache = caches.default;
+	const cacheKey = new Request(request.url + cacheKeySuffix, { method: 'GET' });
+	const hit = await cache.match(cacheKey);
+	if (hit) {
+	  const clientRes = new Response(hit.body, hit);
+	  clientRes.headers.set('cache-control', 'no-store');
+	  clientRes.headers.set('x-edge-cache', 'HIT');
+	  return clientRes;
+	}
+	const res = await compute();
+	if (res.ok) {
+	  const cacheCopy = res.clone();
+	  cacheCopy.headers.set('cache-control', `public, max-age=${EDGE_CACHE_TTL_SECONDS}`);
+	  ctx.waitUntil(cache.put(cacheKey, cacheCopy));
+	}
+	res.headers.set('cache-control', 'no-store');
+	res.headers.set('x-edge-cache', 'MISS');
+	return res;
+  }
+
   function getLoginHTML(error = ''): string {
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -1705,7 +1746,7 @@ button:hover { background: #0077ed; }
   }
 
   export default {
-	async fetch(request: Request, env: Env): Promise<Response> {
+	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 	  const url = new URL(request.url);
 	  const path = url.pathname;
 
@@ -1786,30 +1827,34 @@ button:hover { background: #0077ed; }
 	  }
 
 	  if (request.method === 'GET' && path === '/tags') {
-		const { results } = await env.links_db.prepare(
-		  'SELECT tags FROM links WHERE tags IS NOT NULL AND tags != "" AND deleted_at IS NULL AND archived_at IS NULL AND is_private = 0'
-		).all();
-		const locked = isUnlocked(request) ? [] : await getLockedTags(env);
-		const tagMap: Record<string, number> = {};
-		results.forEach((row: any) => {
-		  if (row.tags) row.tags.split(',').forEach((t: string) => {
-			const tag = t.trim();
-			if (tag && !locked.includes(tag)) tagMap[tag] = (tagMap[tag] || 0) + 1;
+		return withEdgeCache(request, ctx, isUnlocked(request) ? '?_u=1' : '?_u=0', async () => {
+		  const { results } = await env.links_db.prepare(
+			'SELECT tags FROM links WHERE tags IS NOT NULL AND tags != "" AND deleted_at IS NULL AND archived_at IS NULL AND is_private = 0'
+		  ).all();
+		  const locked = isUnlocked(request) ? [] : await getLockedTags(env);
+		  const tagMap: Record<string, number> = {};
+		  results.forEach((row: any) => {
+			if (row.tags) row.tags.split(',').forEach((t: string) => {
+			  const tag = t.trim();
+			  if (tag && !locked.includes(tag)) tagMap[tag] = (tagMap[tag] || 0) + 1;
+			});
 		  });
+		  return new Response(JSON.stringify(tagMap), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 		});
-		return new Response(JSON.stringify(tagMap), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 	  }
 
 	  if (request.method === 'GET' && path === '/tags-admin') {
-		const { results } = await env.links_db.prepare(
-		  'SELECT tags FROM links WHERE tags IS NOT NULL AND tags != "" AND deleted_at IS NULL'
-		).all();
-		const tagMap: Record<string, number> = {};
-		results.forEach((row: any) => {
-		  row.tags.split(',').forEach((t: string) => { const tag = t.trim(); if (tag) tagMap[tag] = (tagMap[tag] || 0) + 1; });
+		return withEdgeCache(request, ctx, '', async () => {
+		  const { results } = await env.links_db.prepare(
+			'SELECT tags FROM links WHERE tags IS NOT NULL AND tags != "" AND deleted_at IS NULL'
+		  ).all();
+		  const tagMap: Record<string, number> = {};
+		  results.forEach((row: any) => {
+			row.tags.split(',').forEach((t: string) => { const tag = t.trim(); if (tag) tagMap[tag] = (tagMap[tag] || 0) + 1; });
+		  });
+		  const sorted = Object.entries(tagMap).map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count);
+		  return new Response(JSON.stringify(sorted), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 		});
-		const sorted = Object.entries(tagMap).map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count);
-		return new Response(JSON.stringify(sorted), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 	  }
 
 	  if (request.method === 'POST' && path === '/rename-tag') {
@@ -1851,25 +1896,32 @@ button:hover { background: #0077ed; }
 	  }
 
 	  if (request.method === 'GET' && path === '/collections-data') {
-		await env.links_db.prepare('CREATE TABLE IF NOT EXISTS tag_metadata (id INTEGER PRIMARY KEY AUTOINCREMENT, tag TEXT NOT NULL UNIQUE, name TEXT, description TEXT, locked INTEGER DEFAULT 0, created_at DATETIME DEFAULT (datetime(\'now\')))').run();
-		try { await env.links_db.prepare('ALTER TABLE tag_metadata ADD COLUMN locked INTEGER DEFAULT 0').run(); } catch {}
-		const { results: rows } = await env.links_db.prepare('SELECT tags, created_at FROM links WHERE deleted_at IS NULL AND tags IS NOT NULL AND tags != \'\'').all();
-		const tagMap = new Map<string, { count: number; latest: string; earliest: string }>();
-		for (const row of rows as any[]) {
-		  const tags = row.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
-		  for (const tag of tags) {
-			const ex = tagMap.get(tag);
-			if (ex) { ex.count++; if (row.created_at > ex.latest) ex.latest = row.created_at; if (row.created_at < ex.earliest) ex.earliest = row.created_at; }
-			else tagMap.set(tag, { count: 1, latest: row.created_at, earliest: row.created_at });
+		// tag_metadata (with its `locked` column) is created/altered by
+		// migrations/setup, not on every read -- confirmed live via
+		// `PRAGMA`/sqlite_master before removing the CREATE TABLE IF NOT
+		// EXISTS / ALTER TABLE that used to run here on every single
+		// request. It's also written to unconditionally elsewhere
+		// (rename-tag, delete-tag, /collection-meta) with no such guard, so
+		// those already assumed it exists.
+		return withEdgeCache(request, ctx, isUnlocked(request) ? '?_u=1' : '?_u=0', async () => {
+		  const { results: rows } = await env.links_db.prepare('SELECT tags, created_at FROM links WHERE deleted_at IS NULL AND tags IS NOT NULL AND tags != \'\'').all();
+		  const tagMap = new Map<string, { count: number; latest: string; earliest: string }>();
+		  for (const row of rows as any[]) {
+			const tags = row.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+			for (const tag of tags) {
+			  const ex = tagMap.get(tag);
+			  if (ex) { ex.count++; if (row.created_at > ex.latest) ex.latest = row.created_at; if (row.created_at < ex.earliest) ex.earliest = row.created_at; }
+			  else tagMap.set(tag, { count: 1, latest: row.created_at, earliest: row.created_at });
+			}
 		  }
-		}
-		const { results: meta } = await env.links_db.prepare('SELECT * FROM tag_metadata').all();
-		const metaMap: Record<string, any> = {};
-		(meta as any[]).forEach((m: any) => { metaMap[m.tag] = m; });
-		const collections = Array.from(tagMap.entries())
-		  .map(([tag, d]) => ({ tag, count: d.count, latest: d.latest, earliest: d.earliest, name: metaMap[tag]?.name || null, description: metaMap[tag]?.description || null, locked: metaMap[tag]?.locked ? true : false }))
-		  .sort((a, b) => (b.latest > a.latest ? 1 : -1));
-		return new Response(JSON.stringify({ collections, unlocked: isUnlocked(request) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+		  const { results: meta } = await env.links_db.prepare('SELECT * FROM tag_metadata').all();
+		  const metaMap: Record<string, any> = {};
+		  (meta as any[]).forEach((m: any) => { metaMap[m.tag] = m; });
+		  const collections = Array.from(tagMap.entries())
+			.map(([tag, d]) => ({ tag, count: d.count, latest: d.latest, earliest: d.earliest, name: metaMap[tag]?.name || null, description: metaMap[tag]?.description || null, locked: metaMap[tag]?.locked ? true : false }))
+			.sort((a, b) => (b.latest > a.latest ? 1 : -1));
+		  return new Response(JSON.stringify({ collections, unlocked: isUnlocked(request) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+		});
 	  }
 
 	  if (request.method === 'GET' && path === '/collection-links') {
@@ -2249,8 +2301,12 @@ function savePasted() {
 	  if (request.method === 'GET' && path === '/links') {
 		const search = url.searchParams.get('search') || '';
 		const tagsParam = url.searchParams.get('tags') || '';
-		const page = parseInt(url.searchParams.get('page') || '1');
-		const pp = parseInt(url.searchParams.get('perPage') || '50');
+		const page = Math.max(1, parseInt(url.searchParams.get('page') || '1') || 1);
+		// Clamped to the largest option the UI itself offers (see the
+		// perPage <select> below) -- perPage flows straight into LIMIT with
+		// no other bound, so an uncapped value let a caller force an
+		// arbitrarily large scan/OFFSET.
+		const pp = Math.min(200, Math.max(1, parseInt(url.searchParams.get('perPage') || '50') || 50));
 		const view = url.searchParams.get('view') || 'all';
   
 		const conditions: string[] = ['deleted_at IS NULL'];
