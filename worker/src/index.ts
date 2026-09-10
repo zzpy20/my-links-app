@@ -450,6 +450,7 @@ interface Env {
 		<button class="sel-restore" id="btn-sel-restore" onclick="restoreSelected()" style="display:none">&#8617; Restore Selected</button>
 		<button class="sel-private" id="btn-private" onclick="togglePrivateSelected()">&#128274; Make Private</button>
 		<button class="sel-export" onclick="refetchMissingThumbnails()">&#8635; Fetch Thumbnails</button>
+		<button class="sel-export" onclick="viewSelected()">&#128065; View Selected</button>
 		<button class="sel-export" onclick="exportLinks()">&#8681; Export</button>
 		<button class="sel-delete" onclick="deleteSelected()">&#128465; Delete Selected</button>
 		<button class="sel-clear" onclick="clearSel()">&#x2715; Cancel</button>
@@ -679,6 +680,7 @@ interface Env {
 	var div = document.createElement('div');
 	div.className = 'cact';
 	var btns = [
+	  { title: 'Copy Link', icon: '&#128279;', fn: function() { navigator.clipboard.writeText(l.url); } },
 	  { title: 'Edit', icon: '&#9998;', fn: function() { openEdit(l.id); } },
 	  { title: l.read ? 'Unread' : 'Read', icon: '&#10003;', fn: function() { togRead(l.id, l.read ? 0 : 1); } },
 	];
@@ -695,7 +697,14 @@ interface Env {
 	btns.forEach(function(b) {
 	  var btn = document.createElement('button');
 	  btn.className = 'abtn'; btn.title = b.title; btn.innerHTML = b.icon;
-	  btn.onclick = function(e) { e.stopPropagation(); b.fn(); };
+	  btn.onclick = function(e) {
+		e.stopPropagation(); b.fn();
+		if (b.title === 'Copy Link') {
+		  var orig = btn.innerHTML;
+		  btn.innerHTML = '&#10003;';
+		  setTimeout(function() { btn.innerHTML = orig; }, 1000);
+		}
+	  };
 	  div.appendChild(btn);
 	});
 	return div;
@@ -743,7 +752,12 @@ interface Env {
 		}
 	  }
 	  body.appendChild(title);
-	  if (l.description) { var desc = document.createElement('div'); desc.className = isGrid ? 'cdesc' : 'ldesc'; desc.textContent = l.description; body.appendChild(desc); }
+	  if (l.description) {
+		var desc = document.createElement('div'); desc.className = isGrid ? 'cdesc' : 'ldesc';
+		desc.textContent = l.description.length > 200 ? l.description.slice(0, 200) + '…' : l.description;
+		desc.title = l.description;
+		body.appendChild(desc);
+	  }
 	  body.appendChild(mkNotes(l.notes, l.id));
 	  var tgh = mkTags(l.tags);
 	  var dateStr = fmtDate(l.created_at);
@@ -1086,7 +1100,7 @@ interface Env {
 	.then(function() { clearSel(); load(curSearch, curPage); });
   }
 
-  function exportLinks() {
+  function buildExportHtml() {
 	var ids = Array.from(selectedIds);
 	var links = ids.length > 0
 	  ? ids.map(function(id){ return cl.find(function(x){ return x.id === id; }); }).filter(Boolean)
@@ -1137,6 +1151,19 @@ interface Env {
 	  + rows
 	  + '</div></body></html>';
 
+	return html;
+  }
+
+  function viewSelected() {
+	var html = buildExportHtml();
+	if (!html) return;
+	var w = window.open('', '_blank');
+	if (w) { w.document.open(); w.document.write(html); w.document.close(); }
+  }
+
+  function exportLinks() {
+	var html = buildExportHtml();
+	if (!html) return;
 	var blob = new Blob([html], {type: 'text/html;charset=utf-8'});
 	var a = document.createElement('a');
 	a.href = URL.createObjectURL(blob);
@@ -1146,7 +1173,7 @@ interface Env {
 	document.body.removeChild(a);
 	setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
   }
-  
+
   function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
   function doLogout() { location.href = '/logout'; }
