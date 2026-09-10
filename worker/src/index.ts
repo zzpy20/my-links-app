@@ -507,7 +507,8 @@ interface Env {
 	</div>
   </div>
   <script>
-  var cv = 'grid', cl = [], st, at = [], tpo = true, atm = {}, curPage = 1, perPage = 50, curSearch = '';
+  var cv = (function() { try { return localStorage.getItem('viewMode') === 'list' ? 'list' : 'grid'; } catch (e) { return 'grid'; } })();
+  var cl = [], st, at = [], tpo = true, atm = {}, curPage = 1, perPage = 50, curSearch = '';
   var selectedIds = new Set();
   var curTab = 'all';
   
@@ -542,6 +543,7 @@ interface Env {
   
   function setView(v) {
 	cv = v;
+	try { localStorage.setItem('viewMode', v); } catch (e) {}
 	document.getElementById('btn-grid').classList.toggle('active', v === 'grid');
 	document.getElementById('btn-list').classList.toggle('active', v === 'list');
 	render(cl);
@@ -1368,6 +1370,8 @@ interface Env {
 	if (wrap && !wrap.contains(e.target)) { var dd = document.getElementById('tag-dropdown'); if (dd) dd.style.display='none'; }
   });
   
+  document.getElementById('btn-grid').classList.toggle('active', cv === 'grid');
+  document.getElementById('btn-list').classList.toggle('active', cv === 'list');
   loadTags();
   load('', 1);
   updateTrashBadge();
