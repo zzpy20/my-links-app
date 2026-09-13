@@ -1012,8 +1012,16 @@ interface Env {
 	var dd = document.getElementById('tag-dropdown');
 	dd.style.display = 'block';
 	document.getElementById('tag-dd-new').value = '';
-	var allTags = Object.keys(atm).sort();
 	var selectedLinks = cl.filter(function(l) { return selectedIds.has(l.id); });
+	// atm (from /tags) excludes locked/private links, so it alone misses any
+	// tag used only there -- union it with tags actually on the selection so
+	// Manage Tags always reflects what's really on the selected links.
+	var tagSet = {};
+	Object.keys(atm).forEach(function(t) { tagSet[t] = true; });
+	selectedLinks.forEach(function(l) {
+	  (l.tags || '').split(',').map(function(t){return t.trim();}).filter(Boolean).forEach(function(t){ tagSet[t] = true; });
+	});
+	var allTags = Object.keys(tagSet).sort();
 	var list = document.getElementById('tag-dd-list');
 	list.innerHTML = '';
 	if (!allTags.length) { list.innerHTML = '<div style="padding:10px 14px;font-size:13px;color:#aeaeb2;">No tags yet</div>'; return; }
