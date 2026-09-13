@@ -424,7 +424,7 @@ interface Env {
 	<div class="tab" id="tab-private" onclick="switchTab('private')">&#128274; Locked folder <span class="tab-count" id="cnt-private"></span></div>
   </div>
   <button id="btn-lock-now" onclick="lockLockedFolder()" style="display:none;margin:8px 0 0;background:#e8e8ed;color:#1d1d1f;border:none;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;">&#128274; Lock now</button>
-  <div class="search-hint" id="search-hint">&#128269; Searching across All, Archive &amp; Locked folder</div>
+  <div class="search-hint" id="search-hint">&#128269; Searching across All &amp; Archive</div>
   <div class="tag-panel" id="tag-panel">
 	<div class="tag-panel-header" onclick="ttp()">
 	  <span class="lbl">TAGS</span>
@@ -2401,11 +2401,9 @@ function savePasted() {
 			conditions.push('1 = 0');
 		  }
 		} else if (view === 'search') {
-		  // global search spans All, Archive & Locked folder -- but locked
-		  // links only become searchable once unlocked, same as everywhere else.
-		  if (!isUnlocked(request)) {
-			conditions.push('is_private = 0');
-		  }
+		  // Locked links never surface in global search -- they only live
+		  // in Locked folder, regardless of unlock state.
+		  conditions.push('is_private = 0');
 		} else {
 		  conditions.push('archived_at IS NULL');
 		  conditions.push('is_private = 0');
