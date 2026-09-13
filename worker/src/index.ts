@@ -270,6 +270,10 @@ interface Env {
   .ldate { font-size: 11px; color: #aeaeb2; }
   .li .cact { top: 10px; right: 10px; }
   .empty { text-align: center; padding: 80px 24px; color: #aeaeb2; }
+  .locked-folder-panel { text-align: center; padding: 80px 24px; color: #6e6e73; }
+  .locked-folder-panel .lf-icon { font-size: 40px; margin-bottom: 12px; }
+  .locked-folder-panel .lf-msg { font-size: 15px; font-weight: 500; color: #1d1d1f; margin-bottom: 4px; }
+  .locked-folder-panel .lf-sub { font-size: 13px; margin-bottom: 16px; }
   .sel-bar { position: sticky; top: 57px; z-index: 9; background: #0071e3; color: white; padding: 10px 24px; display: none; align-items: center; gap: 12px; flex-wrap: wrap; }
   .sel-bar.visible { display: flex; }
   .sel-info { font-size: 14px; font-weight: 600; }
@@ -416,9 +420,9 @@ interface Env {
   <div class="tab-bar" id="tab-bar">
 	<div class="tab active" id="tab-all" onclick="switchTab('all')">&#128279; All <span class="tab-count" id="cnt-all">0</span></div>
 	<div class="tab" id="tab-archive" onclick="switchTab('archive')">&#128230; Archive <span class="tab-count" id="cnt-archive">0</span></div>
-	<div class="tab" id="tab-private" onclick="switchTab('private')">&#128274; Private <span class="tab-count" id="cnt-private">0</span></div>
+	<div class="tab" id="tab-private" onclick="switchTab('private')">&#128274; Locked folder <span class="tab-count" id="cnt-private"></span></div>
   </div>
-  <div class="search-hint" id="search-hint">&#128269; Searching across All, Archive &amp; Private</div>
+  <div class="search-hint" id="search-hint">&#128269; Searching across All, Archive &amp; Locked folder</div>
   <div class="tag-panel" id="tag-panel">
 	<div class="tag-panel-header" onclick="ttp()">
 	  <span class="lbl">TAGS</span>
@@ -448,7 +452,7 @@ interface Env {
 	</div>
 		<button class="sel-archive" id="btn-sel-archive" onclick="archiveSelected()">&#128230; Archive Selected</button>
 		<button class="sel-restore" id="btn-sel-restore" onclick="restoreSelected()" style="display:none">&#8617; Restore Selected</button>
-		<button class="sel-private" id="btn-private" onclick="togglePrivateSelected()">&#128274; Make Private</button>
+		<button class="sel-private" id="btn-private" onclick="togglePrivateSelected()">&#128274; Lock</button>
 		<button class="sel-export" onclick="refetchMissingThumbnails()">&#8635; Fetch Thumbnails</button>
 		<button class="sel-export" onclick="viewSelected()">&#128065; View Selected</button>
 		<button class="sel-export" onclick="exportLinks()">&#8681; Export</button>
@@ -560,10 +564,38 @@ interface Env {
 	var isSearchMode = curSearch.trim().length > 0;
 	p.set('view', isSearchMode ? 'search' : curTab);
 	fetch('/links?' + p).then(function(r) { return r.json(); }).then(function(d) {
+	  if (curTab === 'private' && !isSearchMode && d.locked) {
+		cl = [];
+		renderLockedFolder();
+		renderPager(0);
+		document.getElementById('cnt-private').textContent = '';
+		return;
+	  }
 	  cl = d.results;
 	  render(d.results);
 	  renderPager(d.total);
 	  if (!isSearchMode) document.getElementById('cnt-' + curTab).textContent = d.total;
+	});
+  }
+
+  function renderLockedFolder() {
+	var c = document.getElementById('con');
+	c.innerHTML = '<div class="locked-folder-panel">'
+	  + '<div class="lf-icon">&#128274;</div>'
+	  + '<div class="lf-msg">This folder is locked</div>'
+	  + '<div class="lf-sub">Unlock to view its links</div>'
+	  + '<button style="background:#0071e3;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;" onclick="unlockLockedFolder()">&#128275; Unlock</button>'
+	  + '</div>';
+  }
+
+  function unlockLockedFolder() {
+	var pw = prompt('Enter your password to unlock:');
+	if (!pw) return;
+	fetch('/unlock', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:pw})})
+	.then(function(r){ return r.json(); })
+	.then(function(d){
+	  if (d.ok) { load('', 1); }
+	  else { alert('Wrong password.'); }
 	});
   }
   
@@ -692,7 +724,7 @@ interface Env {
 	if (showRestore) {
 	  btns.push({ title: 'Restore', icon: '&#8617;', fn: function() { unarchiveLink(l.id); } });
 	} else {
-	  btns.push({ title: isPrivate ? 'Make Public' : 'Make Private', icon: isPrivate ? '&#128275;' : '&#128274;', fn: function() { togPrivate(l.id, isPrivate ? 0 : 1); } });
+	  btns.push({ title: isPrivate ? 'Unlock' : 'Lock', icon: isPrivate ? '&#128275;' : '&#128274;', fn: function() { togPrivate(l.id, isPrivate ? 0 : 1); } });
 	  btns.push({ title: 'Archive', icon: '&#128230;', fn: function() { archiveLink(l.id); } });
 	}
 	btns.push({ title: 'Delete', icon: '&#x2715;', fn: function() { delLink(l.id); } });
@@ -750,7 +782,7 @@ interface Env {
 		if (l.archived_at) {
 		  var sb = document.createElement('span'); sb.className = 'src-badge-archive'; sb.textContent = '📦 Archive'; title.appendChild(sb);
 		} else if (l.is_private) {
-		  var sb2 = document.createElement('span'); sb2.className = 'src-badge-private'; sb2.textContent = '🔒 Private'; title.appendChild(sb2);
+		  var sb2 = document.createElement('span'); sb2.className = 'src-badge-private'; sb2.textContent = '🔒 Locked'; title.appendChild(sb2);
 		}
 	  }
 	  body.appendChild(title);
@@ -767,7 +799,7 @@ interface Env {
 		var u = document.createElement('div'); u.className = 'curl'; u.textContent = dom(l.url); body.appendChild(u);
 		var td = document.createElement('div'); td.className = 'ctags';
 		if (tgh) td.innerHTML = tgh;
-		if (l.is_private) { var pb = document.createElement('span'); pb.className = 'priv-badge'; pb.textContent = '\uD83D\uDD12 Private'; td.appendChild(pb); }
+		if (l.is_private) { var pb = document.createElement('span'); pb.className = 'priv-badge'; pb.textContent = '\uD83D\uDD12 Locked'; td.appendChild(pb); }
 		if (tgh || l.is_private) body.appendChild(td);
 		var dt = document.createElement('div'); dt.className = 'cdate'; dt.textContent = dateStr; body.appendChild(dt);
 	  } else {
@@ -775,7 +807,7 @@ interface Env {
 		var u2 = document.createElement('span'); u2.className = 'lurl'; u2.textContent = dom(l.url); meta.appendChild(u2);
 		var td2 = document.createElement('div');
 		if (tgh) td2.innerHTML = tgh;
-		if (l.is_private) { var pb2 = document.createElement('span'); pb2.className = 'priv-badge'; pb2.textContent = '\uD83D\uDD12 Private'; td2.appendChild(pb2); }
+		if (l.is_private) { var pb2 = document.createElement('span'); pb2.className = 'priv-badge'; pb2.textContent = '\uD83D\uDD12 Locked'; td2.appendChild(pb2); }
 		if (tgh || l.is_private) meta.appendChild(td2);
 		var dt2 = document.createElement('span'); dt2.className = 'ldate'; dt2.textContent = dateStr; meta.appendChild(dt2);
 		body.appendChild(meta);
@@ -925,10 +957,10 @@ interface Env {
 	  var privBtn = document.getElementById('btn-private');
 	  privBtn.style.display = (curTab === 'archive' || (isSearchMode && allArchived)) ? 'none' : '';
 	  if (curTab === 'private') {
-		privBtn.textContent = '\uD83D\uDD13 Make Public';
+		privBtn.textContent = '\uD83D\uDD13 Unlock';
 	  } else {
 		var allPrivate = selectedLinks.every(function(l) { return !!l.is_private; });
-		privBtn.textContent = allPrivate ? '\uD83D\uDD13 Make Public' : '\uD83D\uDD12 Make Private';
+		privBtn.textContent = allPrivate ? '\uD83D\uDD13 Unlock' : '\uD83D\uDD12 Lock';
 	  }
 	} else {
 	  bar.classList.remove('visible');
@@ -1109,7 +1141,7 @@ interface Env {
 	  : cl;
 	if (!links.length) return;
 
-	var tabLabel = curSearch ? 'Search: ' + curSearch : (curTab === 'all' ? 'All Links' : curTab === 'archive' ? 'Archive' : 'Private');
+	var tabLabel = curSearch ? 'Search: ' + curSearch : (curTab === 'all' ? 'All Links' : curTab === 'archive' ? 'Archive' : 'Locked folder');
 	var exportLabel = ids.length > 0 ? ids.length + ' selected link(s)' : links.length + ' link(s) on current page';
 
 	var rows = links.map(function(l) {
@@ -1118,7 +1150,7 @@ interface Env {
 	  }).join('') : '';
 	  var badges = '';
 	  if (l.archived_at) badges += '<span style="display:inline-block;background:#ff9500;color:white;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700;margin-left:6px;">Archive</span>';
-	  if (l.is_private) badges += '<span style="display:inline-block;background:#5856d6;color:white;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700;margin-left:6px;">Private</span>';
+	  if (l.is_private) badges += '<span style="display:inline-block;background:#5856d6;color:white;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700;margin-left:6px;">Locked</span>';
 	  var desc = l.description ? '<p style="font-size:13px;color:#555;margin:0 0 10px;line-height:1.5;">' + esc(l.description) + '</p>' : '';
 	  var notes = l.notes ? '<div style="font-size:13px;color:#3a3a3c;background:#f9f9fb;border-left:3px solid #0071e3;padding:8px 12px;border-radius:0 6px 6px 0;white-space:pre-wrap;margin-bottom:10px;">' + esc(l.notes) + '</div>' : '';
 	  var safeUrl = esc(l.url);
@@ -2348,12 +2380,17 @@ function savePasted() {
   
 		const conditions: string[] = ['deleted_at IS NULL'];
 		const params: string[] = [];
-  
+		let privateLocked = false;
+
 		if (view === 'archive') {
 		  conditions.push('archived_at IS NOT NULL');
 		} else if (view === 'private') {
 		  conditions.push('archived_at IS NULL');
 		  conditions.push('is_private = 1');
+		  if (!isUnlocked(request)) {
+			privateLocked = true;
+			conditions.push('1 = 0');
+		  }
 		} else if (view === 'search') {
 		  // global search: only exclude deleted
 		} else {
@@ -2392,7 +2429,7 @@ function savePasted() {
 		  const countRow = await env.links_db.prepare('SELECT COUNT(*) as total FROM links' + where).bind(...params).first() as any;
 		  const total = countRow ? countRow.total : 0;
 		  const { results } = await env.links_db.prepare('SELECT * FROM links' + where + ' ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(...params, pp, (page-1)*pp).all();
-		  return new Response(JSON.stringify({ results, total, page, perPage: pp }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+		  return new Response(JSON.stringify({ results, total, page, perPage: pp, locked: privateLocked }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 		});
 	  }
   
