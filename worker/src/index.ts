@@ -2394,15 +2394,19 @@ function savePasted() {
 
 		if (view === 'archive') {
 		  conditions.push('archived_at IS NOT NULL');
+		  conditions.push('is_private = 0');
 		} else if (view === 'private') {
-		  conditions.push('archived_at IS NULL');
 		  conditions.push('is_private = 1');
 		  if (!isUnlocked(request)) {
 			privateLocked = true;
 			conditions.push('1 = 0');
 		  }
 		} else if (view === 'search') {
-		  // global search: only exclude deleted
+		  // global search spans All, Archive & Locked folder -- but locked
+		  // links only become searchable once unlocked, same as everywhere else.
+		  if (!isUnlocked(request)) {
+			conditions.push('is_private = 0');
+		  }
 		} else {
 		  conditions.push('archived_at IS NULL');
 		  conditions.push('is_private = 0');
