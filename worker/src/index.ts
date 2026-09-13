@@ -423,6 +423,7 @@ interface Env {
 	<div class="tab" id="tab-archive" onclick="switchTab('archive')">&#128230; Archive <span class="tab-count" id="cnt-archive">0</span></div>
 	<div class="tab" id="tab-private" onclick="switchTab('private')">&#128274; Locked folder <span class="tab-count" id="cnt-private"></span></div>
   </div>
+  <button id="btn-lock-now" onclick="lockLockedFolder()" style="display:none;margin:8px 0 0;background:#e8e8ed;color:#1d1d1f;border:none;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;">&#128274; Lock now</button>
   <div class="search-hint" id="search-hint">&#128269; Searching across All, Archive &amp; Locked folder</div>
   <div class="tag-panel" id="tag-panel">
 	<div class="tag-panel-header" onclick="ttp()">
@@ -565,17 +566,20 @@ interface Env {
 	var isSearchMode = curSearch.trim().length > 0;
 	p.set('view', isSearchMode ? 'search' : curTab);
 	fetch('/links?' + p).then(function(r) { return r.json(); }).then(function(d) {
+	  var lockBtn = document.getElementById('btn-lock-now');
 	  if (curTab === 'private' && !isSearchMode && d.locked) {
 		cl = [];
 		renderLockedFolder();
 		renderPager(0);
 		document.getElementById('cnt-private').textContent = '';
+		lockBtn.style.display = 'none';
 		return;
 	  }
 	  cl = d.results;
 	  render(d.results);
 	  renderPager(d.total);
 	  if (!isSearchMode) document.getElementById('cnt-' + curTab).textContent = d.total;
+	  lockBtn.style.display = (curTab === 'private' && !isSearchMode) ? '' : 'none';
 	});
   }
 
@@ -587,6 +591,10 @@ interface Env {
 	  + '<div class="lf-sub">Unlock to view its links</div>'
 	  + '<button style="background:#0071e3;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;" onclick="unlockLockedFolder()">&#128275; Unlock</button>'
 	  + '</div>';
+  }
+
+  function lockLockedFolder() {
+	fetch('/lock', {method:'POST'}).then(function(){ load('', 1); });
   }
 
   function unlockLockedFolder() {
