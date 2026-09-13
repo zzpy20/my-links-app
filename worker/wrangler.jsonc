@@ -14,6 +14,13 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
+	"routes": [
+		{
+			"pattern": "links.1000600.xyz",
+			"zone_name": "1000600.xyz",
+			"custom_domain": true
+		}
+	],
 	"d1_databases": [
 		{
 			"binding": "links_db",
