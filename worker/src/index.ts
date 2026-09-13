@@ -2025,13 +2025,6 @@ button:hover { background: #0077ed; }
 	const body = await request.json() as { password: string };
 	const validPassword = (env.LOCK_PASSWORD || '').trim();
 	const submitted = (body.password || '').trim();
-	// TEMPORARY diagnostic -- logs lengths only, never the actual values.
-	console.log('unlock-debug', {
-	  hasSecret: !!env.LOCK_PASSWORD,
-	  secretLen: validPassword.length,
-	  submittedLen: submitted.length,
-	  match: validPassword === submitted,
-	});
 	if (validPassword && submitted === validPassword) {
 	  return new Response(JSON.stringify({ ok: true }), {
 		headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Set-Cookie': 'unlocked=true; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=3600' },
