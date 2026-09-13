@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-09-13 — Locked folder, tag/search leak fixes, wrangler.jsonc route fix
+
+### New Features
+
+**Locked folder** (renamed from "Private")
+- The old Private tab was just a filter — anyone with normal app access could see it, no password required. Now genuinely password-protected, reusing the same `isUnlocked()`/cookie mechanism already used for locked collections
+- Server excludes locked links entirely when not unlocked (not just hidden client-side) — the tab's count stays blank rather than leaking how many locked links exist
+- Independent `LOCK_PASSWORD` secret — previously the unlock check reused `LOGIN_PASSWORD || API_TOKEN`, the same credential as the main app login, so there was no way to rotate one without rotating the other
+- Manual "Lock now" button — re-locks immediately instead of waiting for the 1-hour cookie to expire
+- "Make Private"/"Make Public"/"🔒 Private" wording renamed to Lock/Unlock/Locked throughout (tab label, per-link toggle, bulk toggle, badges) to match
+
+### Bug Fixes
+
+**Locked links leaking outside Locked folder**
+- Archive's view filter never checked `is_private` — a link that was both archived and locked showed up unprotected under Archive, and was simultaneously invisible in Locked folder (which required `archived_at IS NULL`). Archive now excludes locked links, and Locked folder shows a locked link regardless of archive status, so every locked entry lives in exactly one place
+- Global search wasn't filtering `is_private` at all — locked links were searchable regardless of lock state, contradicting the point of locking them. Now excluded unconditionally; the search-hint text was corrected from "Searching across All, Archive & Locked folder" to "Searching across All & Archive"
+
+**Selection bar**
+- The Lock button was hardcoded hidden whenever the Archive tab was active (and whenever everything selected was already archived, even from search) — a leftover from before archived+locked was a valid combination
+
+**Manage Tags dropdown**
+- Built its checkbox list from `GET /tags`, which deliberately excludes locked/private links so they don't leak into the All tab's filter chips — meant any tag used only on locked links had no checkbox at all, since the list didn't know it existed. Could show "No tags yet" on a selection that actually had tags. Now unions the global tag list with tags actually present on the selected links, so it always reflects the real selection regardless of which tab it's opened from
+
+### Infrastructure
+
+**wrangler.jsonc config drift**
+- The custom domain route (`links.1000600.xyz`) was configured live via the Cloudflare dashboard but was never present in `wrangler.jsonc`. A non-interactive `wrangler deploy` silently accepted the "override remote config with local" prompt and dropped the route from the live Worker. Caught and restored within minutes; the route (plus `observability.enabled`) is now committed to the config file so this can't silently repeat on a future deploy from either session
+
+---
+
 ## 2026-05-06 — Collections sorting, iPhone shortcut fix
 
 ### New Features
