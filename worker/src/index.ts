@@ -535,7 +535,6 @@ interface Env {
 	document.getElementById('tag-panel').style.display = tab === 'all' ? '' : 'none';
 	document.getElementById('btn-sel-archive').style.display = tab === 'archive' ? 'none' : '';
 	document.getElementById('btn-sel-restore').style.display = tab === 'archive' ? '' : 'none';
-	document.getElementById('btn-private').style.display = tab === 'archive' ? 'none' : '';
 	updateSelBar();
 	load('', 1);
 	if (tab === 'all') loadTags();
@@ -964,7 +963,7 @@ interface Env {
 		archiveBtn.style.display = ''; restoreBtn.style.display = 'none';
 	  }
 	  var privBtn = document.getElementById('btn-private');
-	  privBtn.style.display = (curTab === 'archive' || (isSearchMode && allArchived)) ? 'none' : '';
+	  privBtn.style.display = '';
 	  if (curTab === 'private') {
 		privBtn.textContent = '\uD83D\uDD13 Unlock';
 	  } else {
