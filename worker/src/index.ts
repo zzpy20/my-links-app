@@ -2,6 +2,7 @@ interface Env {
 	links_db: D1Database;
 	API_TOKEN: string;
 	LOGIN_PASSWORD?: string;
+	LOCK_PASSWORD?: string;
   }
 
   const THUMBNAIL_BATCH_LIMIT = 10;
@@ -2022,8 +2023,8 @@ button:hover { background: #0077ed; }
 
   if (request.method === 'POST' && path === '/unlock') {
 	const body = await request.json() as { password: string };
-	const validPassword = ((env.LOGIN_PASSWORD || env.API_TOKEN) || '').trim();
-	if ((body.password || '').trim() === validPassword) {
+	const validPassword = (env.LOCK_PASSWORD || '').trim();
+	if (validPassword && (body.password || '').trim() === validPassword) {
 	  return new Response(JSON.stringify({ ok: true }), {
 		headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Set-Cookie': 'unlocked=true; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=3600' },
 	  });
