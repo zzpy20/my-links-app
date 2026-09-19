@@ -570,11 +570,11 @@ interface Env {
 	p.set('page', String(curPage));
 	p.set('perPage', String(perPage));
 	var isSearchMode = curSearch.trim().length > 0;
-	p.set('view', isSearchMode ? 'search' : curTab);
+	p.set('view', isSearchMode ? (curTab === 'private' ? 'private' : 'search') : curTab);
 	if (bust) p.set('_t', String(Date.now()));
 	fetch('/links?' + p).then(function(r) { return r.json(); }).then(function(d) {
 	  var lockBtn = document.getElementById('btn-lock-now');
-	  if (curTab === 'private' && !isSearchMode && d.locked) {
+	  if (curTab === 'private' && d.locked) {
 		cl = [];
 		renderLockedFolder();
 		renderPager(0);
