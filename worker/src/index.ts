@@ -323,9 +323,12 @@ interface Env {
   .tprev { width: 100%; height: 120px; object-fit: cover; border-radius: 8px; margin-top: 8px; display: block; }
   .tprev.hidden { display: none; }
   .rfbtn { background: #f5f5f7; border: 1px solid #d2d2d7; border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer; margin-top: 8px; width: 100%; text-align: left; }
-  .dropz { border: 1.5px dashed #d2d2d7; border-radius: 8px; padding: 14px; margin-top: 8px; text-align: center; font-size: 13px; color: #6e6e73; cursor: pointer; transition: border-color .15s, background .15s; }
+  .dropz { border: 1.5px dashed #d2d2d7; border-radius: 8px; padding: 14px; margin-top: 8px; text-align: center; font-size: 13px; color: #6e6e73; transition: border-color .15s, background .15s; outline: none; }
   .dropz.drag { border-color: #0071e3; background: #f0f7ff; }
+  .dropz:focus { border-color: #0071e3; background: #f0f7ff; }
   .dropz.busy { color: #0071e3; }
+  .dzbrowse { font-size: 12px; color: #6e6e73; text-align: center; margin-top: 6px; }
+  .dzbrowse .dzlink { color: #0071e3; text-decoration: underline; cursor: pointer; }
   .mbtns { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
   .bcancel { background: #f5f5f7; border: none; border-radius: 10px; padding: 8px 18px; font-size: 14px; cursor: pointer; }
   .bsave { background: #0071e3; color: white; border: none; border-radius: 10px; padding: 8px 18px; font-size: 14px; cursor: pointer; }
@@ -863,7 +866,8 @@ interface Env {
 	  '<label>Caption</label><input type="text" id="ec" value="' + esc(l.description || '') + '">' +
 	  '<label>Thumbnail URL</label><input type="text" id="eth" value="' + esc(tv) + '" oninput="pvT()" placeholder="https://...">' +
 	  tphtml +
-	  '<div class="dropz" id="edz">Drop an image, paste (&#8984;V), or click to browse</div>' +
+	  '<div class="dropz" id="edz" tabindex="0">Drop an image here, or click here and press &#8984;V to paste</div>' +
+	  '<div class="dzbrowse">or <span class="dzlink" id="edzb">browse for a file&hellip;</span></div>' +
 	  '<input type="file" id="efile" accept="image/*" style="display:none">' +
 	  '<button class="rfbtn" onclick="rfetch(' + id + ')">&#8635; Re-fetch title &amp; thumbnail</button>' +
 	  '<div class="mbtns"><button class="bdel" onclick="delLink(' + id + ')">Delete</button><button class="bdel" style="background:#ff9500" onclick="archiveLink(' + id + ')">&#128230; Archive</button><button class="bcancel" onclick="clsM()">Cancel</button><button class="bsave" onclick="saveE(' + id + ')">Save</button></div>');
@@ -871,9 +875,10 @@ interface Env {
 	  var e = document.getElementById('et'); if (e) e.focus();
 	  var fi = document.getElementById('efile');
 	  var dz = document.getElementById('edz');
+	  var dzb = document.getElementById('edzb');
 	  if (fi) fi.onchange = function() { if (fi.files && fi.files[0]) handleImageFile(fi.files[0]); };
+	  if (dzb) dzb.onclick = function() { if (fi) fi.click(); };
 	  if (dz) {
-		dz.onclick = function() { if (fi) fi.click(); };
 		dz.ondragover = function(e) { e.preventDefault(); dz.className = 'dropz drag'; };
 		dz.ondragleave = function() { dz.className = 'dropz'; };
 		dz.ondrop = function(e) {
