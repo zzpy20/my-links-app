@@ -1821,7 +1821,11 @@ function openAll() {
   var items = curLinks.map(function(l) {
     var u = String(l.url || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
     var t = esc(l.title || l.url);
-    return '<a href="' + u + '" target="_blank">' + t + '</a>';
+    var h = hostname(l.url);
+    var img = l.thumbnail
+      ? '<img src="' + esc(l.thumbnail) + '" loading="lazy" onerror="this.onerror=null;this.src=\\'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(h) + '&sz=32\\'">'
+      : '<img src="https://www.google.com/s2/favicons?domain=' + encodeURIComponent(h) + '&sz=32" onerror="this.style.visibility=\\'hidden\\'">';
+    return '<a href="' + u + '" target="_blank">' + img + '<span class="lt">' + t + '</span></a>';
   }).join('');
   var cnt = curLinks.length;
   var html = '<html><head><meta charset="UTF-8"><title>Open All Links</title>'
@@ -1832,8 +1836,10 @@ function openAll() {
     + '.btn{background:#0071e3;color:white;border:none;border-radius:8px;padding:9px 18px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:16px;display:block}'
     + '.btn:hover{background:#0077ed}'
     + '.note{font-size:12px;color:#aeaeb2;margin-bottom:16px}'
-    + 'a{display:block;padding:9px 6px;color:#0071e3;text-decoration:none;border-bottom:1px solid #f5f5f7;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    + 'a{display:flex;align-items:center;gap:10px;padding:9px 6px;color:#0071e3;text-decoration:none;border-bottom:1px solid #f5f5f7;font-size:14px}'
     + 'a:last-child{border-bottom:none}a:hover{background:#f9f9fb;border-radius:6px}'
+    + 'a img{width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;background:#f0f0f5}'
+    + 'a .lt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
     + '</style></head><body>'
     + '<div class="card">'
     + '<h2>Open All Links</h2>'
