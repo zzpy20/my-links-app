@@ -323,6 +323,9 @@ interface Env {
   .tprev { width: 100%; height: 120px; object-fit: cover; border-radius: 8px; margin-top: 8px; display: block; }
   .tprev.hidden { display: none; }
   .rfbtn { background: #f5f5f7; border: 1px solid #d2d2d7; border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer; margin-top: 8px; width: 100%; text-align: left; }
+  .dropz { border: 1.5px dashed #d2d2d7; border-radius: 8px; padding: 14px; margin-top: 8px; text-align: center; font-size: 13px; color: #6e6e73; cursor: pointer; transition: border-color .15s, background .15s; }
+  .dropz.drag { border-color: #0071e3; background: #f0f7ff; }
+  .dropz.busy { color: #0071e3; }
   .mbtns { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
   .bcancel { background: #f5f5f7; border: none; border-radius: 10px; padding: 8px 18px; font-size: 14px; cursor: pointer; }
   .bsave { background: #0071e3; color: white; border: none; border-radius: 10px; padding: 8px 18px; font-size: 14px; cursor: pointer; }
@@ -516,6 +519,7 @@ interface Env {
   var cv = (function() { try { return localStorage.getItem('viewMode') === 'list' ? 'list' : 'grid'; } catch (e) { return 'grid'; } })();
   var cl = [], st, at = [], tpo = true, atm = {}, curPage = 1, perPage = 50, curSearch = '';
   var selectedIds = new Set();
+  var curPasteHandler = null;
   var curTab = 'all';
   
   function switchTab(tab) {
@@ -831,7 +835,10 @@ interface Env {
   function showM(html) {
 	document.getElementById('mr').innerHTML = '<div class="mo" onclick="clsM()"><div class="md" onclick="event.stopPropagation()">' + html + '</div></div>';
   }
-  function clsM() { document.getElementById('mr').innerHTML = ''; }
+  function clsM() {
+	document.getElementById('mr').innerHTML = '';
+	if (curPasteHandler) { document.removeEventListener('paste', curPasteHandler); curPasteHandler = null; }
+  }
   
   function openNotes(id) {
 	var l = cl.find(function(x) { return x.id === id; });
@@ -856,9 +863,63 @@ interface Env {
 	  '<label>Caption</label><input type="text" id="ec" value="' + esc(l.description || '') + '">' +
 	  '<label>Thumbnail URL</label><input type="text" id="eth" value="' + esc(tv) + '" oninput="pvT()" placeholder="https://...">' +
 	  tphtml +
+	  '<div class="dropz" id="edz">Drop an image, paste (&#8984;V), or click to browse</div>' +
+	  '<input type="file" id="efile" accept="image/*" style="display:none">' +
 	  '<button class="rfbtn" onclick="rfetch(' + id + ')">&#8635; Re-fetch title &amp; thumbnail</button>' +
 	  '<div class="mbtns"><button class="bdel" onclick="delLink(' + id + ')">Delete</button><button class="bdel" style="background:#ff9500" onclick="archiveLink(' + id + ')">&#128230; Archive</button><button class="bcancel" onclick="clsM()">Cancel</button><button class="bsave" onclick="saveE(' + id + ')">Save</button></div>');
-	setTimeout(function() { var e = document.getElementById('et'); if (e) e.focus(); }, 50);
+	setTimeout(function() {
+	  var e = document.getElementById('et'); if (e) e.focus();
+	  var fi = document.getElementById('efile');
+	  var dz = document.getElementById('edz');
+	  if (fi) fi.onchange = function() { if (fi.files && fi.files[0]) handleImageFile(fi.files[0]); };
+	  if (dz) {
+		dz.onclick = function() { if (fi) fi.click(); };
+		dz.ondragover = function(e) { e.preventDefault(); dz.className = 'dropz drag'; };
+		dz.ondragleave = function() { dz.className = 'dropz'; };
+		dz.ondrop = function(e) {
+		  e.preventDefault(); dz.className = 'dropz';
+		  if (e.dataTransfer.files && e.dataTransfer.files[0]) handleImageFile(e.dataTransfer.files[0]);
+		};
+	  }
+	  if (curPasteHandler) document.removeEventListener('paste', curPasteHandler);
+	  curPasteHandler = function(e) {
+		var items = (e.clipboardData && e.clipboardData.items) || [];
+		for (var i = 0; i < items.length; i++) {
+		  if (items[i].type && items[i].type.indexOf('image/') === 0) {
+			e.preventDefault();
+			handleImageFile(items[i].getAsFile());
+			break;
+		  }
+		}
+	  };
+	  document.addEventListener('paste', curPasteHandler);
+	}, 50);
+  }
+  function handleImageFile(file) {
+	if (!file || file.type.indexOf('image/') !== 0) return;
+	if (file.size > 15 * 1024 * 1024) { alert('Image is too large (max 15MB).'); return; }
+	var dz = document.getElementById('edz');
+	if (dz) { dz.textContent = 'Compressing...'; dz.className = 'dropz busy'; }
+	var url = URL.createObjectURL(file);
+	var img = new Image();
+	img.onload = function() {
+	  URL.revokeObjectURL(url);
+	  var maxW = 480;
+	  var scale = Math.min(1, maxW / img.width);
+	  var w = Math.max(1, Math.round(img.width * scale)), h = Math.max(1, Math.round(img.height * scale));
+	  var canvas = document.createElement('canvas');
+	  canvas.width = w; canvas.height = h;
+	  canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+	  var dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+	  var eth = document.getElementById('eth');
+	  if (eth) { eth.value = dataUrl; pvT(); }
+	  if (dz) { dz.textContent = 'Image ready — click Save to apply'; dz.className = 'dropz'; }
+	};
+	img.onerror = function() {
+	  URL.revokeObjectURL(url);
+	  if (dz) { dz.textContent = 'Could not read that image — try another file'; dz.className = 'dropz'; }
+	};
+	img.src = url;
   }
   function pvT() {
 	var v = document.getElementById('eth').value;
