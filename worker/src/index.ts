@@ -1549,6 +1549,7 @@ header h1 { font-size: 18px; font-weight: 700; color: #1d1d1f; }
 .lrow { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f5f5f7; }
 .lrow:last-child { border-bottom: none; }
 .lfav { width: 16px; height: 16px; flex-shrink: 0; border-radius: 3px; }
+.ltimg { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; flex-shrink: 0; display: block; background: #f0f0f5; }
 .linfo { flex: 1; min-width: 0; }
 .ltitle { font-size: 14px; font-weight: 500; color: #1d1d1f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ltitle a { color: inherit; text-decoration: none; }
@@ -1661,6 +1662,12 @@ function esc(s) {
 
 function hostname(url) { try { return new URL(url).hostname; } catch(e) { return url; } }
 
+function favFallback(img, host) {
+  img.onerror = function() { this.style.display = 'none'; };
+  img.className = 'lfav';
+  img.src = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(host) + '&sz=32';
+}
+
 function fmtDate(s) {
   if (!s) return '';
   return new Date(s.endsWith('Z') ? s : s + 'Z').toLocaleDateString('en-AU', {day:'numeric', month:'short', year:'numeric', timeZone:'Australia/Brisbane'});
@@ -1724,7 +1731,11 @@ function loadCol(tag) {
         var l = curLinks[i];
         var h = hostname(l.url);
         html += '<div class="lrow">';
-        html += '<img class="lfav" src="https://www.google.com/s2/favicons?domain=' + encodeURIComponent(h) + '&sz=32" onerror="this.style.display=\\'none\\'">';
+        if (l.thumbnail) {
+          html += '<img class="ltimg" src="' + esc(l.thumbnail) + '" loading="lazy" onerror="favFallback(this,\\'' + h + '\\')">';
+        } else {
+          html += '<img class="lfav" src="https://www.google.com/s2/favicons?domain=' + encodeURIComponent(h) + '&sz=32" onerror="this.style.display=\\'none\\'">';
+        }
         html += '<div class="linfo">';
         html += '<div class="ltitle"><a href="' + esc(l.url) + '" target="_blank" rel="noopener">' + esc(l.title || l.url) + '</a></div>';
         html += '<div class="lurl">' + esc(h) + '</div>';
