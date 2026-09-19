@@ -1838,7 +1838,7 @@ function openAll() {
     + '.note{font-size:12px;color:#aeaeb2;margin-bottom:16px}'
     + 'a{display:flex;align-items:center;gap:10px;padding:9px 6px;color:#0071e3;text-decoration:none;border-bottom:1px solid #f5f5f7;font-size:14px}'
     + 'a:last-child{border-bottom:none}a:hover{background:#f9f9fb;border-radius:6px}'
-    + 'a img{width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;background:#f0f0f5}'
+    + 'a img{width:80px;height:80px;object-fit:cover;border-radius:8px;flex-shrink:0;background:#f0f0f5}'
     + 'a .lt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
     + '</style></head><body>'
     + '<div class="card">'
