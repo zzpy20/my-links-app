@@ -554,7 +554,7 @@ interface Env {
 	render(cl);
   }
   
-  function load(s, page) {
+  function load(s, page, bust) {
 	if (s !== undefined) curSearch = s;
 	if (page !== undefined) curPage = page;
 	var p = new URLSearchParams();
@@ -564,6 +564,7 @@ interface Env {
 	p.set('perPage', String(perPage));
 	var isSearchMode = curSearch.trim().length > 0;
 	p.set('view', isSearchMode ? 'search' : curTab);
+	if (bust) p.set('_t', String(Date.now()));
 	fetch('/links?' + p).then(function(r) { return r.json(); }).then(function(d) {
 	  var lockBtn = document.getElementById('btn-lock-now');
 	  if (curTab === 'private' && !isSearchMode && d.locked) {
@@ -887,7 +888,7 @@ interface Env {
   function delLink(id) {
 	clsM();
 	if (!confirm('Move to trash?')) return;
-	fetch('/links/' + id, {method:'DELETE'}).then(function() { load(); loadTags(); });
+	fetch('/links/' + id, {method:'DELETE'}).then(function() { load(undefined, undefined, true); loadTags(); });
   }
   
   function updateTrashBadge() {
@@ -930,7 +931,7 @@ interface Env {
 	});
   }
   function restoreLink(id) {
-	fetch('/links/' + id + '/restore', {method:'POST'}).then(function() { loadTrash(); load(); loadTags(); updateTrashBadge(); });
+	fetch('/links/' + id + '/restore', {method:'POST'}).then(function() { loadTrash(); load(undefined, undefined, true); loadTags(); updateTrashBadge(); });
   }
   function permDelete(id) {
 	if (!confirm('Permanently delete? This cannot be undone.')) return;
@@ -938,7 +939,7 @@ interface Env {
   }
   function restoreAll() {
 	if (!confirm('Restore all items from trash?')) return;
-	fetch('/trash/restore-all', {method:'POST'}).then(function() { loadTrash(); load(); loadTags(); updateTrashBadge(); });
+	fetch('/trash/restore-all', {method:'POST'}).then(function() { loadTrash(); load(undefined, undefined, true); loadTags(); updateTrashBadge(); });
   }
   function deleteAll() {
 	if (!confirm('Permanently delete all items in trash? This cannot be undone.')) return;
@@ -1056,7 +1057,7 @@ interface Env {
 	if (selectedIds.size === 0) return;
 	if (!confirm('Move ' + selectedIds.size + ' item(s) to trash?')) return;
 	Promise.all(Array.from(selectedIds).map(function(id){return fetch('/links/'+id,{method:'DELETE'});}))
-	.then(function() { clearSel(); load(curSearch, curPage); loadTags(); updateTrashBadge(); });
+	.then(function() { clearSel(); load(curSearch, curPage, true); loadTags(); updateTrashBadge(); });
   }
   
   function addNewTag() {
@@ -1069,26 +1070,26 @@ interface Env {
   function archiveLink(id) {
 	clsM();
 	if (!confirm('Archive this link? You can restore it later.')) return;
-	fetch('/links/' + id + '/archive', {method:'POST'}).then(function() { load(curSearch, curPage); loadTags(); });
+	fetch('/links/' + id + '/archive', {method:'POST'}).then(function() { load(curSearch, curPage, true); loadTags(); });
   }
   
   function unarchiveLink(id) {
 	clsM();
-	fetch('/links/' + id + '/unarchive', {method:'POST'}).then(function() { load(curSearch, curPage); });
+	fetch('/links/' + id + '/unarchive', {method:'POST'}).then(function() { load(curSearch, curPage, true); });
   }
   
   function archiveSelected() {
 	if (selectedIds.size === 0) return;
 	if (!confirm('Archive ' + selectedIds.size + ' selected link(s)?')) return;
 	fetch('/links/batch-archive', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:Array.from(selectedIds)})})
-	.then(function() { clearSel(); load(curSearch, curPage); loadTags(); });
+	.then(function() { clearSel(); load(curSearch, curPage, true); loadTags(); });
   }
   
 	  function restoreSelected() {
 		if (selectedIds.size === 0) return;
 		if (!confirm('Restore ' + selectedIds.size + ' selected link(s)?')) return;
 		Promise.all(Array.from(selectedIds).map(function(id){return fetch('/links/'+id+'/unarchive',{method:'POST'});}))
-		.then(function() { clearSel(); load(curSearch, curPage); });
+		.then(function() { clearSel(); load(curSearch, curPage, true); });
 	  }
 
 	  function refetchMissingThumbnails() {
@@ -1102,7 +1103,7 @@ interface Env {
 		function next() {
 		  if (!ids.length) {
 			alert('Checked ' + done + ' link(s). Updated ' + updated + ' thumbnail(s); ' + stillMissing + ' still missing; ' + failed + ' failed.');
-			clearSel(); load(curSearch, curPage);
+			clearSel(); load(curSearch, curPage, true);
 			return;
 		  }
 		  var chunk = ids.splice(0, 10);
@@ -1147,7 +1148,7 @@ interface Env {
 	}
 	if (!confirm('Make ' + ids.length + ' item(s) ' + (newVal ? 'private?' : 'public?'))) return;
 	Promise.all(ids.map(function(id){return fetch('/links/'+id+'/private',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_private:newVal})});}))
-	.then(function() { clearSel(); load(curSearch, curPage); });
+	.then(function() { clearSel(); load(curSearch, curPage, true); });
   }
 
   function buildExportHtml() {
