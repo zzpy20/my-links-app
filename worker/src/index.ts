@@ -333,6 +333,8 @@ interface Env {
   .bcancel { background: #f5f5f7; border: none; border-radius: 10px; padding: 8px 18px; font-size: 14px; cursor: pointer; }
   .bsave { background: #0071e3; color: white; border: none; border-radius: 10px; padding: 8px 18px; font-size: 14px; cursor: pointer; }
   .bdel { background: #ff3b30; color: white; border: none; border-radius: 10px; padding: 8px 18px; font-size: 14px; cursor: pointer; margin-right: auto; }
+  .bxdanger { background: #ff3b30; color: white; border: none; border-radius: 10px; padding: 8px 18px; font-size: 14px; cursor: pointer; }
+  .cfmsg { font-size: 14px; color: #1d1d1f; line-height: 1.4; margin: 0; }
   .rpanel { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: none; align-items: flex-start; justify-content: center; padding-top: 40px; }
   .rpanel.open { display: flex; }
   .rbox { background: white; border-radius: 16px; width: 90%; max-width: 640px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.2); overflow: hidden; }
@@ -523,6 +525,7 @@ interface Env {
   var cl = [], st, at = [], tpo = true, atm = {}, curPage = 1, perPage = 50, curSearch = '';
   var selectedIds = new Set();
   var curPasteHandler = null;
+  var curConfirmResolve = null;
   var curTab = 'all';
   
   function switchTab(tab) {
@@ -841,8 +844,19 @@ interface Env {
   function clsM() {
 	document.getElementById('mr').innerHTML = '';
 	if (curPasteHandler) { document.removeEventListener('paste', curPasteHandler); curPasteHandler = null; }
+	if (curConfirmResolve) { var r = curConfirmResolve; curConfirmResolve = null; r(false); }
   }
-  
+  function confirmModal(msg, opts) {
+	opts = opts || {};
+	return new Promise(function(resolve) {
+	  curConfirmResolve = resolve;
+	  showM('<h3>' + esc(opts.title || 'Confirm') + '</h3><p class="cfmsg">' + esc(msg) + '</p>' +
+		'<div class="mbtns"><button class="bcancel" id="cfNo">Cancel</button><button class="' + (opts.danger ? 'bxdanger' : 'bsave') + '" id="cfYes">' + esc(opts.okLabel || 'OK') + '</button></div>');
+	  document.getElementById('cfNo').onclick = function() { clsM(); };
+	  document.getElementById('cfYes').onclick = function() { curConfirmResolve = null; resolve(true); clsM(); };
+	});
+  }
+
   function openNotes(id) {
 	var l = cl.find(function(x) { return x.id === id; });
 	if (!l) return;
@@ -952,9 +966,11 @@ interface Env {
 	});
   }
   function delLink(id) {
-	clsM();
-	if (!confirm('Move to trash?')) return;
-	fetch('/links/' + id, {method:'DELETE'}).then(function() { load(undefined, undefined, true); loadTags(); });
+	confirmModal('Move to trash?', {danger:true, okLabel:'Move to Trash'}).then(function(ok) {
+	  if (!ok) return;
+	  fetch('/links/' + id, {method:'DELETE'}).then(function() { load(undefined, undefined, true); loadTags(); })
+		.catch(function() { alert('Failed to move link to trash. Please try again.'); });
+	});
   }
   
   function updateTrashBadge() {
@@ -1000,16 +1016,25 @@ interface Env {
 	fetch('/links/' + id + '/restore', {method:'POST'}).then(function() { loadTrash(); load(undefined, undefined, true); loadTags(); updateTrashBadge(); });
   }
   function permDelete(id) {
-	if (!confirm('Permanently delete? This cannot be undone.')) return;
-	fetch('/links/' + id + '/permanent', {method:'DELETE'}).then(function() { loadTrash(); updateTrashBadge(); });
+	confirmModal('Permanently delete? This cannot be undone.', {danger:true, okLabel:'Delete'}).then(function(ok) {
+	  if (!ok) return;
+	  fetch('/links/' + id + '/permanent', {method:'DELETE'}).then(function() { loadTrash(); updateTrashBadge(); })
+		.catch(function() { alert('Failed to delete. Please try again.'); });
+	});
   }
   function restoreAll() {
-	if (!confirm('Restore all items from trash?')) return;
-	fetch('/trash/restore-all', {method:'POST'}).then(function() { loadTrash(); load(undefined, undefined, true); loadTags(); updateTrashBadge(); });
+	confirmModal('Restore all items from trash?').then(function(ok) {
+	  if (!ok) return;
+	  fetch('/trash/restore-all', {method:'POST'}).then(function() { loadTrash(); load(undefined, undefined, true); loadTags(); updateTrashBadge(); })
+		.catch(function() { alert('Failed to restore items. Please try again.'); });
+	});
   }
   function deleteAll() {
-	if (!confirm('Permanently delete all items in trash? This cannot be undone.')) return;
-	fetch('/trash/empty', {method:'DELETE'}).then(function() { loadTrash(); updateTrashBadge(); });
+	confirmModal('Permanently delete all items in trash? This cannot be undone.', {danger:true, okLabel:'Delete All'}).then(function(ok) {
+	  if (!ok) return;
+	  fetch('/trash/empty', {method:'DELETE'}).then(function() { loadTrash(); updateTrashBadge(); })
+		.catch(function() { alert('Failed to empty trash. Please try again.'); });
+	});
   }
   
   function updateSelBar() {
@@ -1121,9 +1146,12 @@ interface Env {
   
   function deleteSelected() {
 	if (selectedIds.size === 0) return;
-	if (!confirm('Move ' + selectedIds.size + ' item(s) to trash?')) return;
-	Promise.all(Array.from(selectedIds).map(function(id){return fetch('/links/'+id,{method:'DELETE'});}))
-	.then(function() { clearSel(); load(curSearch, curPage, true); loadTags(); updateTrashBadge(); });
+	confirmModal('Move ' + selectedIds.size + ' item(s) to trash?', {danger:true, okLabel:'Move to Trash'}).then(function(ok) {
+	  if (!ok) return;
+	  Promise.all(Array.from(selectedIds).map(function(id){return fetch('/links/'+id,{method:'DELETE'});}))
+	  .then(function() { clearSel(); load(curSearch, curPage, true); loadTags(); updateTrashBadge(); })
+	  .catch(function() { alert('Some items failed to move to trash. Please try again.'); });
+	});
   }
   
   function addNewTag() {
@@ -1134,9 +1162,11 @@ interface Env {
   }
   
   function archiveLink(id) {
-	clsM();
-	if (!confirm('Archive this link? You can restore it later.')) return;
-	fetch('/links/' + id + '/archive', {method:'POST'}).then(function() { load(curSearch, curPage, true); loadTags(); });
+	confirmModal('Archive this link? You can restore it later.', {okLabel:'Archive'}).then(function(ok) {
+	  if (!ok) return;
+	  fetch('/links/' + id + '/archive', {method:'POST'}).then(function() { load(curSearch, curPage, true); loadTags(); })
+		.catch(function() { alert('Failed to archive link. Please try again.'); });
+	});
   }
   
   function unarchiveLink(id) {
@@ -1146,55 +1176,63 @@ interface Env {
   
   function archiveSelected() {
 	if (selectedIds.size === 0) return;
-	if (!confirm('Archive ' + selectedIds.size + ' selected link(s)?')) return;
-	fetch('/links/batch-archive', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:Array.from(selectedIds)})})
-	.then(function() { clearSel(); load(curSearch, curPage, true); loadTags(); });
+	confirmModal('Archive ' + selectedIds.size + ' selected link(s)?', {okLabel:'Archive'}).then(function(ok) {
+	  if (!ok) return;
+	  fetch('/links/batch-archive', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:Array.from(selectedIds)})})
+	  .then(function() { clearSel(); load(curSearch, curPage, true); loadTags(); })
+	  .catch(function() { alert('Failed to archive selected links. Please try again.'); });
+	});
   }
-  
+
 	  function restoreSelected() {
 		if (selectedIds.size === 0) return;
-		if (!confirm('Restore ' + selectedIds.size + ' selected link(s)?')) return;
-		Promise.all(Array.from(selectedIds).map(function(id){return fetch('/links/'+id+'/unarchive',{method:'POST'});}))
-		.then(function() { clearSel(); load(curSearch, curPage, true); });
+		confirmModal('Restore ' + selectedIds.size + ' selected link(s)?').then(function(ok) {
+		  if (!ok) return;
+		  Promise.all(Array.from(selectedIds).map(function(id){return fetch('/links/'+id+'/unarchive',{method:'POST'});}))
+		  .then(function() { clearSel(); load(curSearch, curPage, true); })
+		  .catch(function() { alert('Some items failed to restore. Please try again.'); });
+		});
 	  }
 
 	  function refetchMissingThumbnails() {
 		if (selectedIds.size === 0) return;
 		var missing = cl.filter(function(l) { return selectedIds.has(l.id) && !l.thumbnail; });
 		if (!missing.length) { alert('Selected links already have thumbnails.'); return; }
-		if (!confirm('Fetch thumbnails for ' + missing.length + ' selected link(s) missing thumbnails?')) return;
-		var ids = missing.map(function(l){return l.id;});
-		var done = 0, updated = 0, stillMissing = 0, failed = 0;
-		var info = document.getElementById('sel-info');
-		function next() {
-		  if (!ids.length) {
-			alert('Checked ' + done + ' link(s). Updated ' + updated + ' thumbnail(s); ' + stillMissing + ' still missing; ' + failed + ' failed.');
-			clearSel(); load(curSearch, curPage, true);
-			return;
-		  }
-		  var chunk = ids.splice(0, 10);
-		  info.textContent = 'Fetching thumbnails... ' + done + ' / ' + missing.length;
-		  fetch('/links/batch-refetch-thumbnails', {
-			method:'POST',
-			headers:{'Content-Type':'application/json'},
-			body:JSON.stringify({ids:chunk})
-		  })
-		  .then(function(r){return r.json();})
-		  .then(function(d) {
-			done += d.checked || chunk.length;
-			updated += d.updated || 0;
-			stillMissing += d.missing || 0;
-			failed += d.failed || 0;
+		confirmModal('Fetch thumbnails for ' + missing.length + ' selected link(s) missing thumbnails?', {okLabel:'Fetch'}).then(function(ok) {
+		  if (!ok) return;
+		  var ids = missing.map(function(l){return l.id;});
+		  var done = 0, updated = 0, stillMissing = 0, failed = 0;
+		  var info = document.getElementById('sel-info');
+		  function next() {
+			if (!ids.length) {
+			  alert('Checked ' + done + ' link(s). Updated ' + updated + ' thumbnail(s); ' + stillMissing + ' still missing; ' + failed + ' failed.');
+			  clearSel(); load(curSearch, curPage, true);
+			  return;
+			}
+			var chunk = ids.splice(0, 10);
 			info.textContent = 'Fetching thumbnails... ' + done + ' / ' + missing.length;
-			next();
-		  })
-		  .catch(function() {
-			done += chunk.length;
-			failed += chunk.length;
-			next();
-		  });
-		}
-		next();
+			fetch('/links/batch-refetch-thumbnails', {
+			  method:'POST',
+			  headers:{'Content-Type':'application/json'},
+			  body:JSON.stringify({ids:chunk})
+			})
+			.then(function(r){return r.json();})
+			.then(function(d) {
+			  done += d.checked || chunk.length;
+			  updated += d.updated || 0;
+			  stillMissing += d.missing || 0;
+			  failed += d.failed || 0;
+			  info.textContent = 'Fetching thumbnails... ' + done + ' / ' + missing.length;
+			  next();
+			})
+			.catch(function() {
+			  done += chunk.length;
+			  failed += chunk.length;
+			  next();
+			});
+		  }
+		  next();
+		});
 	  }
 	  
 	  function togPrivate(id, val) {
@@ -1212,9 +1250,12 @@ interface Env {
 	  var allPrivate = ids.every(function(id){var l=cl.find(function(x){return x.id===id;});return l&&l.is_private;});
 	  newVal = allPrivate ? 0 : 1;
 	}
-	if (!confirm('Make ' + ids.length + ' item(s) ' + (newVal ? 'private?' : 'public?'))) return;
-	Promise.all(ids.map(function(id){return fetch('/links/'+id+'/private',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_private:newVal})});}))
-	.then(function() { clearSel(); load(curSearch, curPage, true); });
+	confirmModal('Make ' + ids.length + ' item(s) ' + (newVal ? 'private?' : 'public?'), {okLabel: newVal ? 'Lock' : 'Unlock'}).then(function(ok) {
+	  if (!ok) return;
+	  Promise.all(ids.map(function(id){return fetch('/links/'+id+'/private',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_private:newVal})});}))
+	  .then(function() { clearSel(); load(curSearch, curPage, true); })
+	  .catch(function() { alert('Some items failed to update. Please try again.'); });
+	});
   }
 
   function buildExportHtml() {
@@ -1347,11 +1388,13 @@ interface Env {
   }
 
   function deleteTag(tag, count) {
-	if (!confirm('Remove tag "' + tag + '" from ' + count + ' link' + (count !== 1 ? 's' : '') + '? The links will not be deleted.')) return;
-	fetch('/delete-tag', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tag:tag})})
-	.then(function(r){return r.json();}).then(function(d){
-	  if (d.ok) { loadTagPanel(); loadTags(); load('', 1); }
-	  else alert('Delete failed: ' + (d.error||'unknown'));
+	confirmModal('Remove tag "' + tag + '" from ' + count + ' link' + (count !== 1 ? 's' : '') + '? The links will not be deleted.', {danger:true, okLabel:'Remove'}).then(function(ok) {
+	  if (!ok) return;
+	  fetch('/delete-tag', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tag:tag})})
+	  .then(function(r){return r.json();}).then(function(d){
+		if (d.ok) { loadTagPanel(); loadTags(); load('', 1); }
+		else alert('Delete failed: ' + (d.error||'unknown'));
+	  }).catch(function() { alert('Delete failed. Please try again.'); });
 	});
   }
   
@@ -1392,8 +1435,11 @@ interface Env {
   }
   
   function deleteRule(id) {
-	if (!confirm('Delete this rule?')) return;
-	fetch('/rules/'+id, {method:'DELETE'}).then(function(){loadRules();});
+	confirmModal('Delete this rule?', {danger:true, okLabel:'Delete'}).then(function(ok) {
+	  if (!ok) return;
+	  fetch('/rules/'+id, {method:'DELETE'}).then(function(){loadRules();})
+		.catch(function() { alert('Failed to delete rule. Please try again.'); });
+	});
   }
 
   var _previewRuleId = null;
